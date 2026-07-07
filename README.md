@@ -93,6 +93,24 @@ the back office.
 
 ## Deploying
 
+### Option A — Free static website (no server, no database)
+
+Deploy just the public marketing site to a free static host (Vercel, Netlify,
+Cloudflare Pages…). The contact form is delivered to your email via
+[Formspree](https://formspree.io) instead of the database, so no server is
+needed. The `/admin` CRM is not available in this mode.
+
+1. Create a free form at **formspree.io** and copy its endpoint
+   (e.g. `https://formspree.io/f/xxxxxxxx`).
+2. Push this repo to GitHub, then import it on **vercel.com** (or netlify.com).
+   The included `vercel.json` / `netlify.toml` set the build automatically:
+   build command `npm run build`, output directory `dist`.
+3. In the host's **Environment Variables**, add
+   `VITE_FORMSPREE_ENDPOINT` = your Formspree endpoint from step 1.
+4. Deploy. Your site is live on a free URL (add a custom domain anytime).
+
+### Option B — Full app (website + CRM)
+
 1. Provision a MySQL database and set `DATABASE_URL`, plus a strong `JWT_SECRET`.
 2. `npm ci && npm run build`
 3. `npm start` (serves the built site and the API on `PORT`, default 3000).

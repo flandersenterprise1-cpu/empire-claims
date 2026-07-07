@@ -6,8 +6,14 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { Shield, Award, Users, CheckCircle, Send } from "lucide-react";
-import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
+
+// Formspree endpoint (free email-delivery for form submissions). Set
+// VITE_FORMSPREE_ENDPOINT in your host's environment variables, e.g.
+// https://formspree.io/f/xxxxxxxx
+const FORMSPREE_ENDPOINT = import.meta.env.VITE_FORMSPREE_ENDPOINT as
+  | string
+  | undefined;
 
 const fadeUp = {
   hidden: { opacity: 0, y: 30 },
@@ -66,6 +72,7 @@ const contactTimes = [
 
 export default function Contact() {
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState({
     name: "",
     phone: "",
@@ -82,27 +89,50 @@ export default function Contact() {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
-  const submitForm = trpc.formSubmissions.create.useMutation({
-    onSuccess: () => {
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!FORMSPREE_ENDPOINT) {
+      toast.error(
+        "The contact form isn't set up yet. Please call or email us directly.",
+      );
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const res = await fetch(FORMSPREE_ENDPOINT, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          _subject: `New Claim Review Request — ${form.name}`,
+          Name: form.name,
+          Phone: form.phone,
+          Email: form.email,
+          "Property Address": form.address,
+          "Type of Damage": form.damageType,
+          "Date of Loss": form.dateOfLoss,
+          "Insurance Company": form.insuranceCompany,
+          "Description of Claim": form.description,
+          "Best Time to Contact": form.bestTime,
+          "Service Requested": "Free Claim Review",
+        }),
+      });
+
+      if (!res.ok) throw new Error("Request failed");
+
       setSubmitted(true);
       toast.success("Your claim review request has been received!");
-    },
-    onError: (e: any) => toast.error(e.message ?? "Something went wrong. Please try again."),
-  });
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    submitForm.mutate({
-      name: form.name,
-      phone: form.phone || undefined,
-      email: form.email || undefined,
-      propertyAddress: form.address || undefined,
-      damageType: form.damageType || undefined,
-      dateOfLoss: form.dateOfLoss || undefined,
-      insuranceCompany: form.insuranceCompany || undefined,
-      message: form.description || undefined,
-      serviceRequested: "Free Claim Review",
-    });
+    } catch {
+      toast.error(
+        "Something went wrong. Please try again, or call us directly.",
+      );
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -325,9 +355,20 @@ export default function Contact() {
                   </motion.div>
 
                   <motion.div variants={fadeUp}>
-                    <button type="submit" className="btn-gold" style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                    <button
+                      type="submit"
+                      disabled={submitting}
+                      className="btn-gold"
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.5rem",
+                        opacity: submitting ? 0.7 : 1,
+                        cursor: submitting ? "not-allowed" : "pointer",
+                      }}
+                    >
                       <Send size={14} />
-                      Submit Claim Review Request
+                      {submitting ? "Submitting…" : "Submit Claim Review Request"}
                     </button>
                   </motion.div>
 
