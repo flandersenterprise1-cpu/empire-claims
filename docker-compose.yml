@@ -1,0 +1,20 @@
+# Local MySQL for development.
+#   docker compose up -d
+# Then set in .env:
+#   DATABASE_URL=mysql://empire:empire@localhost:3306/empire_claims
+services:
+  mysql:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: empire_claims
+      MYSQL_USER: empire
+      MYSQL_PASSWORD: empire
+    ports:
+      - "3306:3306"
+    volumes:
+      - empire_mysql_data:/var/lib/mysql
+
+volumes:
+  empire_mysql_data:

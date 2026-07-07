@@ -1,0 +1,287 @@
+/* ============================================================
+   EMPIRE CLAIMS GROUP — Global Styles
+   Design: Dark Luxury Modernism
+   Philosophy: Deep charcoal-black backgrounds, warm gold accents,
+   editorial typography (Cormorant Garamond + Syne + Inter),
+   asymmetric layouts, diagonal section dividers, Framer Motion
+   scroll-reveal animations.
+   ============================================================ */
+
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-gold: var(--gold);
+  --color-gold-light: var(--gold-light);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+}
+
+:root {
+  /* Dark Luxury Theme — always dark */
+  --radius: 0.25rem;
+
+  /* Core palette */
+  --background: oklch(0.1 0.008 265);       /* #0D0F14 deep charcoal-black */
+  --foreground: oklch(0.94 0.005 65);        /* #F0EDE8 warm white */
+  --surface: oklch(0.14 0.01 265);           /* #141720 slightly lighter */
+  --surface-2: oklch(0.18 0.012 265);        /* #1E2330 card surface */
+  --border: oklch(0.22 0.01 265);            /* subtle border */
+
+  /* Gold accent */
+  --gold: oklch(0.72 0.1 75);               /* #B8963E warm muted gold */
+  --gold-light: oklch(0.82 0.1 75);         /* #D4AF5A lighter gold */
+
+  /* Semantic tokens */
+  --card: oklch(0.14 0.01 265);
+  --card-foreground: oklch(0.94 0.005 65);
+  --popover: oklch(0.14 0.01 265);
+  --popover-foreground: oklch(0.94 0.005 65);
+  --primary: oklch(0.55 0.2 260);            /* deep electric blue */
+  --primary-foreground: oklch(0.98 0 0);
+  --secondary: oklch(0.18 0.012 265);
+  --secondary-foreground: oklch(0.94 0.005 65);
+  --muted: oklch(0.22 0.01 265);
+  --muted-foreground: oklch(0.6 0.015 265);
+  --accent: oklch(0.72 0.1 75);             /* gold as accent */
+  --accent-foreground: oklch(0.1 0.008 265);
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.985 0 0);
+  --input: oklch(0.22 0.01 265);
+  --ring: oklch(0.72 0.1 75);               /* gold ring */
+  --sidebar: oklch(0.14 0.01 265);
+  --sidebar-foreground: oklch(0.94 0.005 65);
+  --sidebar-primary: oklch(0.72 0.1 75);
+  --sidebar-primary-foreground: oklch(0.1 0.008 265);
+  --sidebar-accent: oklch(0.18 0.012 265);
+  --sidebar-accent-foreground: oklch(0.94 0.005 65);
+  --sidebar-border: oklch(0.22 0.01 265);
+  --sidebar-ring: oklch(0.72 0.1 75);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Inter', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  [type="button"]:not(:disabled),
+  [type="submit"]:not(:disabled),
+  [type="reset"]:not(:disabled),
+  a[href],
+  select:not(:disabled),
+  input[type="checkbox"]:not(:disabled),
+  input[type="radio"]:not(:disabled) {
+    @apply cursor-pointer;
+  }
+  h1, h2, h3 {
+    font-family: 'Syne', sans-serif;
+    letter-spacing: -0.02em;
+  }
+  .font-display {
+    font-family: 'Cormorant Garamond', serif;
+  }
+  .font-heading {
+    font-family: 'Syne', sans-serif;
+  }
+  .font-label {
+    font-family: 'Space Grotesk', sans-serif;
+  }
+}
+
+@layer components {
+  .container {
+    width: 100%;
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+  .flex {
+    min-height: 0;
+    min-width: 0;
+  }
+  @media (min-width: 640px) {
+    .container {
+      padding-left: 1.5rem;
+      padding-right: 1.5rem;
+    }
+  }
+  @media (min-width: 1024px) {
+    .container {
+      padding-left: 2rem;
+      padding-right: 2rem;
+      max-width: 1280px;
+    }
+  }
+
+  /* Gold accent line above headings */
+  .gold-rule::before {
+    content: '';
+    display: block;
+    width: 3rem;
+    height: 2px;
+    background: var(--gold);
+    margin-bottom: 1rem;
+  }
+
+  /* Gold left border callout */
+  .gold-border-left {
+    border-left: 3px solid var(--gold);
+    padding-left: 1.5rem;
+  }
+
+  /* CTA button — primary gold */
+  .btn-gold {
+    background: var(--gold);
+    color: oklch(0.1 0.008 265);
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    font-size: 0.8rem;
+    padding: 0.875rem 2rem;
+    border-radius: 2px;
+    transition: background 0.2s ease, transform 0.15s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    white-space: nowrap;
+  }
+  .btn-gold:hover {
+    background: var(--gold-light);
+    transform: translateY(-1px);
+  }
+
+  /* CTA button — ghost outline */
+  .btn-outline-gold {
+    background: transparent;
+    color: var(--gold);
+    border: 1px solid var(--gold);
+    font-family: 'Syne', sans-serif;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    font-size: 0.8rem;
+    padding: 0.875rem 2rem;
+    border-radius: 2px;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    white-space: nowrap;
+  }
+  .btn-outline-gold:hover {
+    background: var(--gold);
+    color: oklch(0.1 0.008 265);
+    transform: translateY(-1px);
+  }
+
+  /* Section label */
+  .section-label {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: oklch(0.72 0.1 75);
+  }
+
+  /* Noise grain overlay */
+  .noise-overlay {
+    position: relative;
+  }
+  .noise-overlay::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    opacity: 0.04;
+    mix-blend-mode: overlay;
+  }
+
+  /* Diagonal divider */
+  .diagonal-bottom {
+    clip-path: polygon(0 0, 100% 0, 100% 90%, 0 100%);
+    padding-bottom: 8rem;
+  }
+  .diagonal-top {
+    clip-path: polygon(0 10%, 100% 0, 100% 100%, 0 100%);
+    padding-top: 8rem;
+    margin-top: -4rem;
+  }
+}
+
+/* Select dropdown dark theme */
+select option {
+  background: oklch(0.13 0.01 265);
+  color: oklch(0.94 0.005 65);
+}
+
+/* Form input placeholder color */
+input::placeholder, textarea::placeholder {
+  color: oklch(0.4 0.01 265);
+}
+
+/* Form input focus states */
+input:focus, textarea:focus, select:focus {
+  border-color: oklch(0.72 0.1 75) !important;
+  box-shadow: 0 0 0 2px oklch(0.72 0.1 75 / 0.15);
+}
+
+/* Mobile bottom padding to avoid floating CTA overlap */
+@media (max-width: 1023px) {
+  main {
+    padding-bottom: 5rem;
+  }
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: oklch(0.1 0.008 265);
+}
+::-webkit-scrollbar-thumb {
+  background: oklch(0.3 0.01 265);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--gold);
+}

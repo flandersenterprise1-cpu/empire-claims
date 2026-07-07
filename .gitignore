@@ -1,0 +1,21 @@
+node_modules/
+dist/
+uploads/
+*.local
+
+# env
+.env
+.env.*
+!.env.example
+
+# logs
+*.log
+npm-debug.log*
+
+# editor / OS
+.DS_Store
+.vscode/
+.idea/
+
+# drizzle
+drizzle/migrations/meta/_journal.json.bak
