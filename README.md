@@ -7,6 +7,17 @@ This project was originally built on the Manus platform and has been migrated to
 a fully self-contained codebase that builds and runs from GitHub — no platform
 lock-in.
 
+## Projects in this repository
+
+| Path | Project |
+| --- | --- |
+| `/` (root) | **Empire Claims Group** — public website + back-office Claims Management CRM |
+| `top-dawg-fe-smart-quote/` | **Top Dawg FE Smart Quote** — final-expense quoting and case-placement platform for licensed agents (Next.js + PostgreSQL). See [its README](top-dawg-fe-smart-quote/README.md). |
+
+The two applications are independent: separate `package.json`, separate
+dependencies, separate database, separate CI workflow. Commands below apply to
+the Empire Claims Group app at the repository root.
+
 ## What's inside
 
 - **Public website** (`/`, `/about`, `/services`, `/claims`, `/faq`, `/contact`) —
