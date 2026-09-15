@@ -84,6 +84,36 @@ export function findRate(
     return { status: 'unavailable', reason: 'No rate class matches this client.' };
   }
 
+  // Carrier-published annual rate per $1,000. This is the carrier's own stated
+  // formula, reproduced exactly — not an interpolation or an estimate:
+  //   (annual rate per $1,000 × units + annual policy fee) × monthly modal factor
+  if (table.rateBasis === 'annual_per_thousand') {
+    const row = table.entries.find(
+      (entry) =>
+        entry.age === intake.age &&
+        (entry.sex === intake.sex || entry.sex === 'unisex') &&
+        (entry.tobaccoClass === tobacco || entry.tobaccoClass === 'unismoke') &&
+        entry.ratePerThousand != null,
+    );
+    if (!row || table.monthlyModalFactor == null) {
+      return {
+        status: 'unavailable',
+        reason: `No verified annual rate per $1,000 for age ${intake.age}, ${intake.sex}, ${tobacco.replace('_', '-')} in rate table v${table.version}.`,
+      };
+    }
+    const units = intake.faceAmount / 1000;
+    const annual = Number(row.ratePerThousand) * units + Number(table.annualPolicyFee);
+    return {
+      status: 'found',
+      monthlyPremium: round2(annual * Number(table.monthlyModalFactor)),
+      rateTableId: table.id,
+      rateTableVersion: table.version,
+      effectiveDate: table.effectiveDate,
+      monthlyPolicyFee: round2(Number(table.annualPolicyFee) * Number(table.monthlyModalFactor)),
+      isFictionalSample: table.isFictionalSample,
+    };
+  }
+
   const exact = matchEntry(table.entries, intake.age, intake.sex, tobacco, intake.faceAmount);
   if (exact) {
     return {

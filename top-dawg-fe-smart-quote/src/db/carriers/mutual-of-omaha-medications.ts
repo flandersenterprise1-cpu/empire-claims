@@ -1,0 +1,147 @@
+/**
+ * Mutual of Omaha / United of Omaha — LIVING PROMISE prescription drug lists.
+ *
+ * Source: 'Life Express Products — Prescription Drug Exclusions – Brokerage',
+ * form LY28867_B, page 2 (the Living Promise page).
+ *
+ * The guide states: 'Proposed insureds currently taking any of the following
+ * medications are not eligible for LP coverage... Note: Proposed insureds taking
+ * medications marked with an asterisk (*) may qualify for the Graded benefit
+ * product.'
+ *
+ * Parsed programmatically from the PDF, not hand-typed.
+ */
+
+/** Not eligible for Living Promise at all (no asterisk in the guide). */
+export const LP_DECLINE_MEDICATIONS: string[] = [
+  'abacavir',
+  'alkeran',
+  'aricept',
+  'arimidex',
+  'atripla',
+  'campath',
+  'caprelsa',
+  'casodex',
+  'cellcept',
+  'cognex',
+  'combivir',
+  'crixivan',
+  'cyclosporine',
+  'cytoxan',
+  'donepezil',
+  'droxia',
+  'eligard',
+  'epivir hbv',
+  'ergoloid mesylates',
+  'exelon',
+  'femara',
+  'floxuridine',
+  'fluorouracil',
+  'galantamine',
+  'hydrobromide',
+  'gammagard',
+  'gamunex',
+  'gengraf',
+  'hydrea',
+  'hydroxyurea',
+  'invirase',
+  'leucovorin calcium',
+  'lexiva',
+  'megace',
+  'megestrol acetate',
+  'mitomycin',
+  'mycophenolate mofetil',
+  'myfortic',
+  'namenda',
+  'neupogen',
+  'panretin',
+  'prograf',
+  'razadyne',
+  'retrovir',
+  'revlimid',
+  'rituxan',
+  'sandimmune',
+  'stribild',
+  'sustiva',
+  'tamoxifen',
+  'targretin',
+  'teslac',
+  'truvada',
+  'viracept',
+  'viramune',
+  'viread',
+  'zenapax',
+  'zerit',
+  'ziagen',
+  'zidovudine',
+  'zoladex',
+];
+
+/** Asterisked in the guide — may still qualify for the Graded benefit product. */
+export const LP_GRADED_MEDICATIONS: string[] = [
+  'abilify',
+  'aggrenox',
+  'amiodarone',
+  'ampyra',
+  'antabuse',
+  'avonex',
+  'azilect',
+  'baraclude',
+  'betaseron',
+  'calcium acetate',
+  'campral',
+  'carbidopa/levodopa',
+  'chlorpromazine hcl',
+  'clozapine',
+  'copaxone',
+  'eliquis',
+  'eminase',
+  'geodon',
+  'haldol',
+  'haloperidol',
+  'infergen',
+  'invega',
+  'latuda',
+  'limbitrol',
+  'lithium',
+  'naloxone hcl',
+  'naltrexone hcl',
+  'pegasys',
+  'peg-intron',
+  'perphenazine',
+  'pradaxa',
+  'ranexa',
+  'rebif',
+  'revia',
+  'ribavirin',
+  'risperdal',
+  'saphris',
+  'seroquel',
+  'serzone',
+  'sinemet',
+  'spiriva',
+  'stalevo',
+  'suboxone',
+  'symbyax',
+  'xarelto',
+  'zyprexa',
+];
+
+/**
+ * 'ADDITIONAL INFORMATION REQUIRED' list. The guide asks for the reason for the
+ * medication on the application; underwriting will otherwise obtain it. Treated
+ * as a carrier referral rather than a classification.
+ */
+export const LP_REFER_MEDICATIONS: string[] = [
+  'carvedilol',
+  'clopidogrel',
+  'coreg',
+  'coumadin',
+  'digitek',
+  'digoxin',
+  'enoxaparin sodium',
+  'lanoxin',
+  'lovenox',
+  'plavix',
+  'warfarin',
+];

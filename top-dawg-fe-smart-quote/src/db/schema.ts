@@ -285,6 +285,22 @@ export const rateTables = pgTable(
     monthlyPolicyFee: numeric('monthly_policy_fee', { precision: 10, scale: 2 })
       .notNull()
       .default('0'),
+
+    /**
+     * How the rows in this table are expressed.
+     *  'monthly_exact'       — each row is the monthly premium for that face amount.
+     *  'annual_per_thousand' — each row is an ANNUAL rate per $1,000 and the monthly
+     *                          premium is the carrier's own published formula:
+     *                          (rate × units + annualPolicyFee) × monthlyModalFactor
+     * The second form is a documented carrier methodology, not interpolation.
+     */
+    rateBasis: varchar('rate_basis', { length: 32 }).notNull().default('monthly_exact'),
+    /** Annual policy fee, for annual_per_thousand tables. */
+    annualPolicyFee: numeric('annual_policy_fee', { precision: 10, scale: 2 })
+      .notNull()
+      .default('0'),
+    /** Carrier's published monthly modal factor, e.g. 0.088. */
+    monthlyModalFactor: numeric('monthly_modal_factor', { precision: 8, scale: 5 }),
     sourceDocumentId: integer('source_document_id').references(() => sourceDocuments.id),
     sourcePage: varchar('source_page', { length: 40 }),
     isFictionalSample: boolean('is_fictional_sample').notNull().default(false),

@@ -13,7 +13,7 @@ export const TEST_DATABASE_URL = process.env.TEST_DATABASE_URL;
  */
 export const describeIfDb = TEST_DATABASE_URL ? describe : describe.skip;
 
-export async function setupTestDb() {
+export async function setupTestDb(options: { demoCarrier?: boolean } = {}) {
   if (!TEST_DATABASE_URL) throw new Error('TEST_DATABASE_URL is not set.');
   const sql = postgres(TEST_DATABASE_URL, { max: 1 });
   const db = drizzle(sql, { schema });
@@ -22,7 +22,7 @@ export async function setupTestDb() {
   await sql.unsafe('drop schema if exists public cascade; create schema public;');
   await sql.unsafe('drop schema if exists drizzle cascade;');
   await migrate(db, { migrationsFolder: './drizzle' });
-  await runSeed(db, { demoCarrier: true });
+  await runSeed(db, { demoCarrier: options.demoCarrier ?? true });
 
   return { db, sql };
 }

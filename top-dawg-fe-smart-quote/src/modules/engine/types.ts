@@ -217,6 +217,10 @@ export interface RateTableRecord {
   status: PublishStatus;
   version: number;
   monthlyPolicyFee: number;
+  /** 'monthly_exact' | 'annual_per_thousand' */
+  rateBasis: string;
+  annualPolicyFee: number;
+  monthlyModalFactor: number | null;
   isFictionalSample: boolean;
   entries: RateEntryRecord[];
 }
