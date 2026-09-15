@@ -234,6 +234,7 @@ export async function loadQuoteCatalog(db: Db, query: CatalogQuery): Promise<Pro
           minFaceAmount: product.minFaceAmount,
           maxFaceAmount: product.maxFaceAmount,
           faceIncrement: product.faceIncrement,
+          ageBasis: product.ageBasis,
           minAge: product.minAge,
           maxAge: product.maxAge,
           tobaccoClasses: (product.tobaccoClasses ?? []) as TobaccoClass[],

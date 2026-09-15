@@ -22,6 +22,11 @@ import {
   SC_ROP_RATES,
   type AnnualRateRow,
 } from './american-amicable-rates';
+import { COMBINED_CARRIER, COMBINED_PRODUCTS, COMBINED_RULES } from './combined-insurance';
+import {
+  GENERATIONAL_LIFE_MEDICATIONS,
+  GENERATIONAL_LIFE_RATES,
+} from './combined-insurance-data';
 import {
   LP_DECLINE_MEDICATIONS,
   LP_GRADED_MEDICATIONS,
@@ -382,6 +387,235 @@ export async function loadMutualOfOmaha(db: Database, adminId: number | null) {
   return carrier;
 }
 
+
+/* -------------------------------------------------------------------------- */
+/* Combined Insurance — Generational Life                                      */
+/* -------------------------------------------------------------------------- */
+
+export async function loadCombinedInsurance(db: Database, adminId: number | null) {
+  await resetCarrier(db, COMBINED_CARRIER.slug);
+
+  const [carrier] = await db
+    .insert(schema.carriers)
+    .values({
+      slug: COMBINED_CARRIER.slug,
+      name: COMBINED_CARRIER.name,
+      status: 'inactive',
+      isVerified: false,
+      isFictionalSample: false,
+      notes:
+        'Generational Life loaded from the Producer Guide (500202-R2) and the Generational Life Underwriting Guide. OUTSTANDING before activation: (1) the annual-to-monthly modal factor — neither document publishes it, so no monthly premium can be produced; (2) whether the $50 policy fee is annual or monthly; (3) state availability; (4) date of birth capture, because this carrier rates on age NEAREST birthday.',
+    })
+    .returning();
+
+  const [producerDoc] = await db
+    .insert(schema.sourceDocuments)
+    .values({
+      carrierId: carrier.id,
+      title: COMBINED_CARRIER.producerGuide,
+      docType: 'product_guide',
+      reference: '500202-R2',
+      effectiveDate: COMBINED_CARRIER.effectiveDate,
+      notes: 'Product overview p.3, underwriting approach p.8, annual rates per $1,000 pp.9-11.',
+      uploadedByUserId: adminId,
+    })
+    .returning();
+
+  const [uwDoc] = await db
+    .insert(schema.sourceDocuments)
+    .values({
+      carrierId: carrier.id,
+      title: COMBINED_CARRIER.underwritingGuide,
+      docType: 'rx_guide',
+      reference: 'Generational Life Underwriting Guide',
+      notes: 'Medication to rating-class table.',
+      uploadedByUserId: adminId,
+    })
+    .returning();
+
+  const productIdBySlug = new Map<string, number>();
+
+  for (const [index, spec] of COMBINED_PRODUCTS.entries()) {
+    const [product] = await db
+      .insert(schema.products)
+      .values({
+        carrierId: carrier.id,
+        slug: spec.slug,
+        name: spec.name,
+        benefitType: spec.benefitType,
+        status: 'inactive',
+        minFaceAmount: spec.minFaceAmount,
+        maxFaceAmount: spec.maxFaceAmount,
+        faceIncrement: 1000,
+        ageBasis: 'nearest_birthday',
+        minAge: 0,
+        maxAge: 80,
+        tobaccoClasses: ['non_tobacco', 'tobacco'],
+        sexClasses: ['male', 'female'],
+        waitingPeriodMonths: spec.waitingPeriodMonths,
+        simplicityScore: 5,
+        rateMethodology: 'per_thousand',
+        allowInterpolation: false,
+        notes: spec.notes,
+        sortOrder: index,
+      })
+      .returning();
+    productIdBySlug.set(spec.slug, product.id);
+
+    // Rate table: annual rates per $1,000 with NO modal factor, so the engine
+    // will correctly refuse to produce a monthly premium until one is supplied.
+    const [rateTable] = await db
+      .insert(schema.rateTables)
+      .values({
+        productId: product.id,
+        stateCode: null,
+        benefitType: spec.benefitType,
+        effectiveDate: COMBINED_CARRIER.effectiveDate,
+        status: 'draft',
+        version: 1,
+        monthlyPolicyFee: '0',
+        rateBasis: 'annual_per_thousand',
+        annualPolicyFee: '50',
+        monthlyModalFactor: null,
+        sourceDocumentId: producerDoc.id,
+        sourcePage: 'pp.9-11',
+        isFictionalSample: false,
+        notes:
+          'Annual rates per $1,000, based on age NEAREST birthday. The monthly modal factor is not published in the Producer Guide — until it is entered here no monthly premium can be produced. The $50 policy fee is recorded as annual; the guide does not state the basis.',
+        createdByUserId: adminId,
+      })
+      .returning();
+
+    const entries: (typeof schema.rateEntries.$inferInsert)[] = [];
+    for (const row of GENERATIONAL_LIFE_RATES) {
+      const classRates = row[spec.rateClass];
+      for (const [tobaccoClass, pair] of [
+        ['non_tobacco', classRates.nt],
+        ['tobacco', classRates.t],
+      ] as const) {
+        for (const [sexIndex, sex] of (['male', 'female'] as const).entries()) {
+          entries.push({
+            rateTableId: rateTable.id,
+            age: row.age,
+            sex,
+            tobaccoClass,
+            faceAmount: 0,
+            monthlyPremium: '0',
+            ratePerThousand: String(pair[sexIndex]),
+          });
+        }
+      }
+    }
+    for (let i = 0; i < entries.length; i += 500) {
+      await db.insert(schema.rateEntries).values(entries.slice(i, i + 500));
+    }
+  }
+
+  /* --------------------------- Underwriting rules ------------------------ */
+  let ruleCount = 0;
+  for (const rule of COMBINED_RULES) {
+    const [row] = await db
+      .insert(schema.underwritingRules)
+      .values({
+        carrierId: carrier.id,
+        productId: null,
+        stateCode: null,
+        ruleCategory: rule.ruleCategory,
+        conditionCode: rule.conditionCode,
+        treatment: rule.treatment ?? null,
+        lookbackMonths: rule.lookbackMonths ?? null,
+        criteria: rule.criteria as never,
+        result: rule.result,
+        benefitClassification: rule.benefitClassification ?? null,
+        explanation: rule.explanation,
+        underwritingConcern: rule.underwritingConcern ?? null,
+        priority: rule.priority,
+        sourceDocumentId: producerDoc.id,
+        sourcePage: rule.sourcePage,
+        effectiveDate: COMBINED_CARRIER.effectiveDate,
+        ruleVersion: 1,
+        verificationStatus: 'draft',
+        isFictionalSample: false,
+        createdByUserId: adminId,
+      })
+      .returning();
+    await db.insert(schema.ruleVersions).values({
+      ruleId: row.id,
+      version: 1,
+      action: 'created',
+      snapshot: row as never,
+      changedByUserId: adminId,
+      changedByEmail: 'carrier-import',
+    });
+    ruleCount += 1;
+  }
+
+  /* ---------------------------- Medication rules ------------------------- */
+  const preferredId = productIdBySlug.get('generational-life-preferred') ?? null;
+  let medCount = 0;
+  const medRows: (typeof schema.medicationRules.$inferInsert)[] = [];
+
+  for (const [name, condition, action] of GENERATIONAL_LIFE_MEDICATIONS) {
+    const base = {
+      carrierId: carrier.id,
+      medicationName: name,
+      impliesConditionCode: null,
+      sourceDocumentId: uwDoc.id,
+      sourcePage: 'Rx table',
+      effectiveDate: COMBINED_CARRIER.effectiveDate,
+      verificationStatus: 'draft' as const,
+      isFictionalSample: false,
+      createdByUserId: adminId,
+    };
+    const context = condition ? ` The guide associates it with: ${condition}.` : '';
+
+    if (action === 'graded') {
+      medRows.push({
+        ...base,
+        productId: null,
+        result: 'graded',
+        benefitClassification: 'graded',
+        explanation: `The Generational Life underwriting guide restricts ${name} to the Graded Benefit rating class.${context}`,
+      });
+    } else if (action === 'not_preferred') {
+      medRows.push({
+        ...base,
+        productId: preferredId,
+        result: 'decline',
+        benefitClassification: null,
+        explanation: `The Generational Life underwriting guide allows ${name} in the Standard, Sub-Standard and Graded classes only — the Preferred class is ruled out.${context}`,
+      });
+    } else if (action === 'refer') {
+      medRows.push({
+        ...base,
+        productId: null,
+        result: 'refer',
+        benefitClassification: null,
+        explanation: `The Generational Life underwriting guide marks ${name} as "review medical conditions", so the rating class cannot be determined from the medication alone.${context}`,
+      });
+    } else {
+      medRows.push({
+        ...base,
+        productId: null,
+        result: 'allow',
+        benefitClassification: null,
+        explanation: `The Generational Life underwriting guide permits ${name} in all rating classes.${context}`,
+      });
+    }
+    medCount += 1;
+  }
+  for (let i = 0; i < medRows.length; i += 500) {
+    await db.insert(schema.medicationRules).values(medRows.slice(i, i + 500));
+  }
+
+  console.log(
+    `\u2713 Combined Insurance: ${COMBINED_PRODUCTS.length} products, ${ruleCount} draft rules, ` +
+      `${medCount} draft medication rules, ${GENERATIONAL_LIFE_RATES.length * 4} rate rows per product. ` +
+      `No modal factor published \u2014 premiums will read "Rate unavailable".`,
+  );
+  return carrier;
+}
+
 async function main() {
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error('DATABASE_URL is not set.');
@@ -391,6 +625,7 @@ async function main() {
     const adminId = admin?.id ?? null;
     await loadAmericanAmicable(db, adminId);
     await loadMutualOfOmaha(db, adminId);
+    await loadCombinedInsurance(db, adminId);
     console.log('\nAll carrier data loaded as DRAFT / INACTIVE. Verify in the admin area before publishing.');
   } finally {
     await sql.end();

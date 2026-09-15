@@ -50,6 +50,15 @@ export function selectRateTable(
   )[0];
 }
 
+/**
+ * The age this product actually rates on. Returns null when the product needs
+ * age nearest birthday and the intake only established age last birthday.
+ */
+export function ratedAge(ageBasis: string, intake: ClientIntake): number | null {
+  if (ageBasis !== 'nearest_birthday') return intake.age;
+  return intake.ageNearestBirthday ?? null;
+}
+
 function matchEntry(
   entries: RateEntryRecord[],
   age: number,
@@ -84,13 +93,22 @@ export function findRate(
     return { status: 'unavailable', reason: 'No rate class matches this client.' };
   }
 
+  // Rating on the wrong age basis silently mis-prices the case, so refuse.
+  const ratingAge = ratedAge(bundle.product.ageBasis, intake);
+  if (ratingAge == null) {
+    return {
+      status: 'unavailable',
+      reason: `${bundle.product.name} rates on age nearest birthday. Enter the client's date of birth so the correct rating age can be worked out.`,
+    };
+  }
+
   // Carrier-published annual rate per $1,000. This is the carrier's own stated
   // formula, reproduced exactly — not an interpolation or an estimate:
   //   (annual rate per $1,000 × units + annual policy fee) × monthly modal factor
   if (table.rateBasis === 'annual_per_thousand') {
     const row = table.entries.find(
       (entry) =>
-        entry.age === intake.age &&
+        entry.age === ratingAge &&
         (entry.sex === intake.sex || entry.sex === 'unisex') &&
         (entry.tobaccoClass === tobacco || entry.tobaccoClass === 'unismoke') &&
         entry.ratePerThousand != null,
@@ -98,7 +116,7 @@ export function findRate(
     if (!row || table.monthlyModalFactor == null) {
       return {
         status: 'unavailable',
-        reason: `No verified annual rate per $1,000 for age ${intake.age}, ${intake.sex}, ${tobacco.replace('_', '-')} in rate table v${table.version}.`,
+        reason: `No verified annual rate per $1,000 for age ${ratingAge}, ${intake.sex}, ${tobacco.replace('_', '-')} in rate table v${table.version}.`,
       };
     }
     const units = intake.faceAmount / 1000;
@@ -114,7 +132,7 @@ export function findRate(
     };
   }
 
-  const exact = matchEntry(table.entries, intake.age, intake.sex, tobacco, intake.faceAmount);
+  const exact = matchEntry(table.entries, ratingAge, intake.sex, tobacco, intake.faceAmount);
   if (exact) {
     return {
       status: 'found',
@@ -131,7 +149,7 @@ export function findRate(
   if (bundle.product.rateMethodology === 'per_thousand' && bundle.product.allowInterpolation) {
     const perThousand = table.entries.find(
       (entry) =>
-        entry.age === intake.age &&
+        entry.age === ratingAge &&
         (entry.sex === intake.sex || entry.sex === 'unisex') &&
         (entry.tobaccoClass === tobacco || entry.tobaccoClass === 'unismoke') &&
         entry.ratePerThousand != null,
@@ -154,6 +172,6 @@ export function findRate(
 
   return {
     status: 'unavailable',
-    reason: `No verified rate for age ${intake.age}, ${intake.sex}, ${tobacco.replace('_', '-')}, $${intake.faceAmount.toLocaleString()} in rate table v${table.version}.`,
+    reason: `No verified rate for age ${ratingAge}, ${intake.sex}, ${tobacco.replace('_', '-')}, $${intake.faceAmount.toLocaleString()} in rate table v${table.version}.`,
   };
 }

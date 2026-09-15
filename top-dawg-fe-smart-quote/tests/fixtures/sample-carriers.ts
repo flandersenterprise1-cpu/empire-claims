@@ -138,6 +138,7 @@ export function bundle(name: string, options: BundleOptions = {}): ProductBundle
       minFaceAmount: options.minFace ?? 5000,
       maxFaceAmount: options.maxFace ?? 15000,
       faceIncrement: options.increment ?? 1000,
+      ageBasis: 'last_birthday',
       minAge: options.minAge ?? 50,
       maxAge: options.maxAge ?? 85,
       tobaccoClasses: options.tobaccoClasses ?? ['non_tobacco', 'tobacco'],

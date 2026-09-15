@@ -30,7 +30,14 @@ export type Tri = 'true' | 'false' | 'unknown';
 
 export interface ClientIntake {
   stateCode: string;
+  /** Age last birthday. */
   age: number;
+  /**
+   * Age nearest birthday, when it can be worked out from a date of birth.
+   * Null when only an age was entered — products that rate on nearest age then
+   * return "Rate unavailable" rather than quoting the wrong age.
+   */
+  ageNearestBirthday?: number | null;
   sex: ApplicantSex;
   tobaccoUse: boolean;
   faceAmount: number;
@@ -126,6 +133,8 @@ export interface ProductRecord {
   minFaceAmount: number;
   maxFaceAmount: number;
   faceIncrement: number;
+  /** 'last_birthday' | 'nearest_birthday' */
+  ageBasis: string;
   minAge: number;
   maxAge: number;
   tobaccoClasses: TobaccoClass[];

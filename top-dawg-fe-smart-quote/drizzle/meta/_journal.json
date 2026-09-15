@@ -15,6 +15,13 @@
       "when": 1789514942386,
       "tag": "0001_quick_blur",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789515865694,
+      "tag": "0002_broken_pretty_boy",
+      "breakpoints": true
     }
   ]
 }

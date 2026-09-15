@@ -189,6 +189,13 @@ export const products = pgTable(
     maxFaceAmount: integer('max_face_amount').notNull().default(25000),
     faceIncrement: integer('face_increment').notNull().default(1000),
 
+    /**
+     * Which age the carrier rates on. Carriers differ: American Amicable and
+     * Mutual of Omaha rate on age last birthday, Combined Insurance on age
+     * nearest birthday. Quoting the wrong one mis-prices the case.
+     */
+    ageBasis: varchar('age_basis', { length: 24 }).notNull().default('last_birthday'),
+
     /** Issue ages, inclusive. */
     minAge: integer('min_age').notNull().default(50),
     maxAge: integer('max_age').notNull().default(85),
