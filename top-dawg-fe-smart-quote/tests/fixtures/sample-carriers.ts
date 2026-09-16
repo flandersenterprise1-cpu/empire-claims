@@ -174,6 +174,8 @@ export function bundle(name: string, options: BundleOptions = {}): ProductBundle
         rateBasis: 'monthly_exact',
         annualPolicyFee: 0,
         monthlyModalFactor: null,
+        policyFeeThreshold: null,
+        monthlyPolicyFeeBelowThreshold: null,
         isFictionalSample: true,
         entries: options.rates ?? rateEntries(30),
       },

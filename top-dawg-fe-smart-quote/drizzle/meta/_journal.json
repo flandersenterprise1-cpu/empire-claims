@@ -22,6 +22,13 @@
       "when": 1789515865694,
       "tag": "0002_broken_pretty_boy",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1789585141485,
+      "tag": "0003_abnormal_master_chief",
+      "breakpoints": true
     }
   ]
 }

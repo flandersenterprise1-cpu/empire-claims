@@ -102,6 +102,41 @@ export function findRate(
     };
   }
 
+  // Transamerica's Solution series rounds the modal factor into the per-unit
+  // rate BEFORE multiplying by units, then adds a flat monthly policy fee that
+  // steps at a face-amount threshold. Reproduced exactly as the guide states it.
+  if (table.rateBasis === 'annual_per_thousand_modal_first') {
+    const row = table.entries.find(
+      (entry) =>
+        entry.age === ratingAge &&
+        (entry.sex === intake.sex || entry.sex === 'unisex') &&
+        (entry.tobaccoClass === tobacco || entry.tobaccoClass === 'unismoke') &&
+        entry.ratePerThousand != null,
+    );
+    if (!row || table.monthlyModalFactor == null) {
+      return {
+        status: 'unavailable',
+        reason: `No verified annual rate per $1,000 for age ${ratingAge}, ${intake.sex}, ${tobacco.replace('_', '-')} in rate table v${table.version}.`,
+      };
+    }
+    const perUnitMonthly = round2(Number(row.ratePerThousand) * Number(table.monthlyModalFactor));
+    const fee =
+      table.policyFeeThreshold != null &&
+      table.monthlyPolicyFeeBelowThreshold != null &&
+      intake.faceAmount < table.policyFeeThreshold
+        ? Number(table.monthlyPolicyFeeBelowThreshold)
+        : Number(table.monthlyPolicyFee);
+    return {
+      status: 'found',
+      monthlyPremium: round2(perUnitMonthly * (intake.faceAmount / 1000) + fee),
+      rateTableId: table.id,
+      rateTableVersion: table.version,
+      effectiveDate: table.effectiveDate,
+      monthlyPolicyFee: fee,
+      isFictionalSample: table.isFictionalSample,
+    };
+  }
+
   // Carrier-published annual rate per $1,000. This is the carrier's own stated
   // formula, reproduced exactly — not an interpolation or an estimate:
   //   (annual rate per $1,000 × units + annual policy fee) × monthly modal factor

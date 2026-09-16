@@ -22,7 +22,13 @@ import {
   SC_ROP_RATES,
   type AnnualRateRow,
 } from './american-amicable-rates';
-import { loadAigCorebridge, loadCicaLife, loadFidelityLife, loadTransamerica } from './load-more';
+import {
+  loadAigCorebridge,
+  loadCicaLife,
+  loadFidelityLife,
+  loadTransamerica,
+  loadTransamericaSolutionSeries,
+} from './load-more';
 import { COMBINED_CARRIER, COMBINED_PRODUCTS, COMBINED_RULES } from './combined-insurance';
 import {
   GENERATIONAL_LIFE_MEDICATIONS,
@@ -630,6 +636,7 @@ async function main() {
     await loadCicaLife(db, adminId);
     await loadAigCorebridge(db, adminId);
     await loadTransamerica(db, adminId);
+    await loadTransamericaSolutionSeries(db, adminId);
     await loadFidelityLife(db, adminId);
     console.log('\nAll carrier data loaded as DRAFT / INACTIVE. Verify in the admin area before publishing.');
   } finally {

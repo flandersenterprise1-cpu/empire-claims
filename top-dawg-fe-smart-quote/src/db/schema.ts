@@ -308,6 +308,16 @@ export const rateTables = pgTable(
       .default('0'),
     /** Carrier's published monthly modal factor, e.g. 0.088. */
     monthlyModalFactor: numeric('monthly_modal_factor', { precision: 8, scale: 5 }),
+    /**
+     * Some carriers charge a different policy fee below a face-amount
+     * threshold (Transamerica: $5.00/month under $5,000, $3.50/month at or
+     * above). Both are null when the fee does not vary.
+     */
+    policyFeeThreshold: integer('policy_fee_threshold'),
+    monthlyPolicyFeeBelowThreshold: numeric('monthly_policy_fee_below_threshold', {
+      precision: 10,
+      scale: 2,
+    }),
     sourceDocumentId: integer('source_document_id').references(() => sourceDocuments.id),
     sourcePage: varchar('source_page', { length: 40 }),
     isFictionalSample: boolean('is_fictional_sample').notNull().default(false),

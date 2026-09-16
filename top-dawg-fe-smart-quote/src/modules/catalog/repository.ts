@@ -201,6 +201,9 @@ export async function loadQuoteCatalog(db: Db, query: CatalogQuery): Promise<Pro
           rateBasis: t.rateBasis,
           annualPolicyFee: Number(t.annualPolicyFee),
           monthlyModalFactor: t.monthlyModalFactor == null ? null : Number(t.monthlyModalFactor),
+          policyFeeThreshold: t.policyFeeThreshold,
+          monthlyPolicyFeeBelowThreshold:
+            t.monthlyPolicyFeeBelowThreshold == null ? null : Number(t.monthlyPolicyFeeBelowThreshold),
           isFictionalSample: t.isFictionalSample,
           entries: rateEntryRows
             .filter((e) => e.rateTableId === t.id)

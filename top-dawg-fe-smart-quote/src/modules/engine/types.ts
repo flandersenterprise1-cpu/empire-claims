@@ -230,6 +230,8 @@ export interface RateTableRecord {
   rateBasis: string;
   annualPolicyFee: number;
   monthlyModalFactor: number | null;
+  policyFeeThreshold: number | null;
+  monthlyPolicyFeeBelowThreshold: number | null;
   isFictionalSample: boolean;
   entries: RateEntryRecord[];
 }

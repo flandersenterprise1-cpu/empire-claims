@@ -525,3 +525,257 @@ export async function loadFidelityLife(db: Database, adminId: number | null) {
   );
   return carrier;
 }
+
+/* -------------------------------------------------------------------------- */
+/* Transamerica — Solution series (Immediate, 10 Pay, Easy)                    */
+/* -------------------------------------------------------------------------- */
+
+import {
+  EASY_SOLUTION,
+  IMMEDIATE_MT_PREFERRED,
+  IMMEDIATE_MT_STANDARD,
+  IMMEDIATE_PREFERRED,
+  IMMEDIATE_STANDARD,
+  TEN_PAY_MT_PREFERRED,
+  TEN_PAY_MT_STANDARD,
+  TEN_PAY_PREFERRED,
+  TEN_PAY_STANDARD,
+  type EasySolutionRow,
+  type SolutionSexedRow,
+  type SolutionUnisexRow,
+} from './transamerica-solution-rates';
+
+const SOLUTION_MODAL = 0.085;
+const SOLUTION_FEE = 3.5;
+const SOLUTION_FEE_LOW = 5.0;
+const SOLUTION_FEE_THRESHOLD = 5000;
+
+/** Maximum issue amount by age, Product Rate/Underwriting Guide p.16. */
+const SOLUTION_FACE_BANDS = [
+  { minAge: 0, maxAge: 55, maxFaceAmount: 50000 },
+  { minAge: 56, maxAge: 65, maxFaceAmount: 40000 },
+  { minAge: 66, maxAge: 75, maxFaceAmount: 30000 },
+  { minAge: 76, maxAge: 85, maxFaceAmount: 25000 },
+];
+
+interface SolutionSpec {
+  slug: string;
+  name: string;
+  riskClass: string;
+  national: SolutionSexedRow[] | EasySolutionRow[];
+  montana?: SolutionUnisexRow[];
+  unisexTobacco?: boolean;
+  minAge: number;
+  maxAge: number;
+  maxFaceAmount: number;
+  banded: boolean;
+  benefitType: 'level' | 'graded';
+  waitingPeriodMonths: number;
+  notes: string;
+}
+
+const SOLUTION_PRODUCTS: SolutionSpec[] = [
+  {
+    slug: 'immediate-solution-preferred',
+    name: 'Immediate Solution — Preferred',
+    riskClass: 'preferred',
+    national: IMMEDIATE_PREFERRED,
+    montana: IMMEDIATE_MT_PREFERRED,
+    minAge: 18, maxAge: 85, maxFaceAmount: 50000, banded: true,
+    benefitType: 'level', waitingPeriodMonths: 0,
+    notes:
+      'Level premiums to age 121, issue ages 0-85 age last birthday (quoted from 18 here). Minimum issue amount $1,000. Maximum by age: 0-55 $50,000, 56-65 $40,000, 66-75 $30,000, 76-85 $25,000. Preferred rates are quoted when every question in application section C4 is answered No.',
+  },
+  {
+    slug: 'immediate-solution-standard',
+    name: 'Immediate Solution — Standard',
+    riskClass: 'standard',
+    national: IMMEDIATE_STANDARD,
+    montana: IMMEDIATE_MT_STANDARD,
+    minAge: 18, maxAge: 85, maxFaceAmount: 50000, banded: true,
+    benefitType: 'level', waitingPeriodMonths: 0,
+    notes:
+      'Standard rates are quoted when one question in application section C4 is answered Yes. NOT AVAILABLE IN WASHINGTON per the rate pages. Washington issue ages for Immediate Solution are 0-65 male and 0-71 female, which this platform does not yet model per state.',
+  },
+  {
+    slug: 'ten-pay-solution-preferred',
+    name: '10 Pay Solution — Preferred',
+    riskClass: 'preferred',
+    national: TEN_PAY_PREFERRED,
+    montana: TEN_PAY_MT_PREFERRED,
+    minAge: 18, maxAge: 85, maxFaceAmount: 50000, banded: true,
+    benefitType: 'level', waitingPeriodMonths: 0,
+    notes: 'Paid up after ten years. Preferred rates are quoted when every question in application section C4 is answered No.',
+  },
+  {
+    slug: 'ten-pay-solution-standard',
+    name: '10 Pay Solution — Standard',
+    riskClass: 'standard',
+    national: TEN_PAY_STANDARD,
+    montana: TEN_PAY_MT_STANDARD,
+    minAge: 18, maxAge: 85, maxFaceAmount: 50000, banded: true,
+    benefitType: 'level', waitingPeriodMonths: 0,
+    notes: 'Paid up after ten years. Standard rates are quoted when one question in application section C4 is answered Yes. NOT AVAILABLE IN WASHINGTON per the rate pages.',
+  },
+  {
+    slug: 'easy-solution',
+    name: 'Easy Solution',
+    riskClass: 'easy',
+    national: EASY_SOLUTION,
+    unisexTobacco: true,
+    minAge: 18, maxAge: 80, maxFaceAmount: 25000, banded: false,
+    benefitType: 'graded', waitingPeriodMonths: 24,
+    notes:
+      'The fallback product, quoted when application section C3 has a Yes answer or section C4 has two Yes answers. Level premiums to age 121, issue ages 18-80 age last birthday (PA 18-70 male). Minimum issue amount $1,000 ($5,000 in PA), maximum $25,000. The death benefit during the first two policy years is the face amount for accidental death and a return of premium for any other cause; after two years it is the face amount. Easy Solution has no tobacco distinction.',
+  },
+];
+
+export async function loadTransamericaSolutionSeries(db: Database, adminId: number | null) {
+  const [carrier] = await db
+    .select()
+    .from(schema.carriers)
+    .where(eq(schema.carriers.slug, TRANSAMERICA_CARRIER.slug))
+    .limit(1);
+  if (!carrier) throw new Error('Load the Transamerica carrier before the Solution series.');
+
+  const [doc] = await db
+    .insert(schema.sourceDocuments)
+    .values({
+      carrierId: carrier.id,
+      title: 'Product Rate/Underwriting Guide — Immediate Solution, 10 Pay Solution & Easy Solution',
+      docType: 'rate_book',
+      reference: 'Solution series rate/underwriting guide',
+      notes: 'Application design p.3, calculating a rate p.15, product overviews and rate pages pp.16-28.',
+      uploadedByUserId: adminId,
+    })
+    .returning();
+
+  let sortOrder = 10;
+  let rateRowCount = 0;
+
+  for (const spec of SOLUTION_PRODUCTS) {
+    const [product] = await db
+      .insert(schema.products)
+      .values({
+        carrierId: carrier.id,
+        slug: spec.slug,
+        name: spec.name,
+        benefitType: spec.benefitType,
+        status: 'inactive',
+        minFaceAmount: 1000,
+        maxFaceAmount: spec.maxFaceAmount,
+        faceIncrement: 1000,
+        ageBasis: 'last_birthday',
+        minAge: spec.minAge,
+        maxAge: spec.maxAge,
+        tobaccoClasses: spec.unisexTobacco ? ['unismoke'] : ['non_tobacco', 'tobacco'],
+        sexClasses: ['male', 'female'],
+        waitingPeriodMonths: spec.waitingPeriodMonths,
+        simplicityScore: 4,
+        rateMethodology: 'per_thousand',
+        allowInterpolation: false,
+        notes: spec.notes,
+        sortOrder: (sortOrder += 1),
+      })
+      .returning();
+
+    if (spec.banded) {
+      for (const band of SOLUTION_FACE_BANDS) {
+        await db.insert(schema.productFaceLimits).values({
+          productId: product.id,
+          minAge: band.minAge,
+          maxAge: band.maxAge,
+          minFaceAmount: 1000,
+          maxFaceAmount: band.maxFaceAmount,
+          notes: 'Maximum issue amount by age — rate guide p.16.',
+        });
+      }
+    }
+
+    await db.insert(schema.productStates).values(
+      STATE_CODES.map((code) => ({
+        productId: product.id,
+        stateCode: code,
+        // The rate pages mark the Standard tables "Not available in WA".
+        isAvailable: !(spec.riskClass === 'standard' && code === 'WA'),
+        notes:
+          spec.riskClass === 'standard' && code === 'WA'
+            ? 'Standard premiums are marked "Not available in WA" on the rate pages.'
+            : null,
+      })),
+    );
+
+    // National table, then the Montana unisex table where the guide publishes one.
+    const tables: Array<{ stateCode: string | null; rows: unknown[]; label: string }> = [
+      { stateCode: null, rows: spec.national, label: 'national rate pages' },
+    ];
+    if (spec.montana) {
+      tables.push({ stateCode: 'MT', rows: spec.montana, label: 'Montana rate pages (unisex)' });
+    }
+
+    for (const t of tables) {
+      const [rateTable] = await db
+        .insert(schema.rateTables)
+        .values({
+          productId: product.id,
+          stateCode: t.stateCode,
+          benefitType: spec.benefitType,
+          effectiveDate: TRANSAMERICA_CARRIER.effectiveDate,
+          status: 'draft',
+          version: 1,
+          monthlyPolicyFee: String(SOLUTION_FEE),
+          rateBasis: 'annual_per_thousand_modal_first',
+          annualPolicyFee: '0',
+          monthlyModalFactor: String(SOLUTION_MODAL),
+          policyFeeThreshold: SOLUTION_FEE_THRESHOLD,
+          monthlyPolicyFeeBelowThreshold: String(SOLUTION_FEE_LOW),
+          sourceDocumentId: doc.id,
+          sourcePage: t.stateCode === 'MT' ? 'MT rate pages' : 'rate pages',
+          isFictionalSample: false,
+          notes: `Annual premiums per unit ($1,000), ${t.label}. Monthly premium = round(rate x ${SOLUTION_MODAL}, 2) x units + $${SOLUTION_FEE} ($${SOLUTION_FEE_LOW} below $${SOLUTION_FEE_THRESHOLD.toLocaleString()}).`,
+          createdByUserId: adminId,
+        })
+        .returning();
+
+      const entries: (typeof schema.rateEntries.$inferInsert)[] = [];
+      for (const row of t.rows as Array<Record<string, never>>) {
+        const r = row as unknown as SolutionSexedRow & SolutionUnisexRow & EasySolutionRow;
+        if (t.stateCode === 'MT') {
+          // Montana is unisex: one rate per tobacco class.
+          for (const tobaccoClass of ['non_tobacco', 'tobacco'] as const) {
+            entries.push({
+              rateTableId: rateTable.id, age: r.age, sex: 'unisex', tobaccoClass,
+              faceAmount: 0, monthlyPremium: '0', ratePerThousand: String(r[tobaccoClass]),
+            });
+          }
+        } else if (spec.unisexTobacco) {
+          // Easy Solution: one rate per sex, no tobacco distinction.
+          for (const sex of ['male', 'female'] as const) {
+            entries.push({
+              rateTableId: rateTable.id, age: r.age, sex, tobaccoClass: 'unismoke',
+              faceAmount: 0, monthlyPremium: '0', ratePerThousand: String(r[sex] as unknown as number),
+            });
+          }
+        } else {
+          for (const sex of ['male', 'female'] as const) {
+            for (const tobaccoClass of ['non_tobacco', 'tobacco'] as const) {
+              entries.push({
+                rateTableId: rateTable.id, age: r.age, sex, tobaccoClass,
+                faceAmount: 0, monthlyPremium: '0',
+                ratePerThousand: String((r[sex] as { non_tobacco: number; tobacco: number })[tobaccoClass]),
+              });
+            }
+          }
+        }
+      }
+      for (let i = 0; i < entries.length; i += 500) {
+        await db.insert(schema.rateEntries).values(entries.slice(i, i + 500));
+      }
+      rateRowCount += entries.length;
+    }
+  }
+
+  console.log(
+    `✓ Transamerica Solution series: ${SOLUTION_PRODUCTS.length} products, ${rateRowCount} verified rate rows (national + Montana unisex).`,
+  );
+}
