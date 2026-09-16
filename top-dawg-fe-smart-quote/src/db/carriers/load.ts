@@ -22,6 +22,7 @@ import {
   SC_ROP_RATES,
   type AnnualRateRow,
 } from './american-amicable-rates';
+import { loadAigCorebridge, loadCicaLife, loadTransamerica } from './load-more';
 import { COMBINED_CARRIER, COMBINED_PRODUCTS, COMBINED_RULES } from './combined-insurance';
 import {
   GENERATIONAL_LIFE_MEDICATIONS,
@@ -626,6 +627,9 @@ async function main() {
     await loadAmericanAmicable(db, adminId);
     await loadMutualOfOmaha(db, adminId);
     await loadCombinedInsurance(db, adminId);
+    await loadCicaLife(db, adminId);
+    await loadAigCorebridge(db, adminId);
+    await loadTransamerica(db, adminId);
     console.log('\nAll carrier data loaded as DRAFT / INACTIVE. Verify in the admin area before publishing.');
   } finally {
     await sql.end();
