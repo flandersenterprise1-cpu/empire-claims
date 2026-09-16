@@ -200,3 +200,35 @@ describe('super quote presentation', () => {
     expect(quote.options[0].recommendation).toContain('COPD classifies graded');
   });
 });
+
+describe('fictional sample data', () => {
+  it('never outranks a real carrier, however cheap it is', () => {
+    const real = bundle('real-carrier', { rates: rateEntries(80) });
+    real.carrier.isFictionalSample = false;
+    real.carrier.name = 'Real Carrier';
+
+    const quote = runSuperQuote({
+      intake: INTAKE,
+      facts: clean,
+      asOf: ASOF,
+      // The fictional option is less than a quarter of the price.
+      bundles: [bundle('demo', { rates: rateEntries(15) }), real],
+    });
+
+    expect(quote.best?.carrierName).toBe('Real Carrier');
+    expect(quote.best?.isFictionalSample).toBe(false);
+    expect(quote.options[0].isFictionalSample).toBe(false);
+    // It is still shown, just ranked below everything real.
+    expect(quote.options.at(-1)?.isFictionalSample).toBe(true);
+  });
+
+  it('still ranks fictional options among themselves when nothing real is available', () => {
+    const quote = runSuperQuote({
+      intake: INTAKE,
+      facts: clean,
+      asOf: ASOF,
+      bundles: [bundle('demo-dear', { rates: rateEntries(60) }), bundle('demo-cheap', { rates: rateEntries(20) })],
+    });
+    expect(quote.best?.monthlyPremium).toBe(20);
+  });
+});

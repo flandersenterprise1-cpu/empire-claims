@@ -165,6 +165,7 @@ export function runSuperQuote(input: EngineInput): SuperQuote {
       trace: outcome.trace,
       exclusions: [],
       rankScore: buildRankScore({
+        isFictionalSample: bundle.carrier.isFictionalSample,
         category,
         benefitType: bundle.product.benefitType,
         confidence,

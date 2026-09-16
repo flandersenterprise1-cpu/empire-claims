@@ -105,6 +105,7 @@ export function clientValueScore(
 }
 
 export function buildRankScore(option: {
+  isFictionalSample?: boolean;
   category: ResultCategory;
   benefitType: BenefitType;
   confidence: ApprovalConfidence;
@@ -114,6 +115,9 @@ export function buildRankScore(option: {
   simplicityScore: number;
 }): number[] {
   return [
+    // 0. Fictional demo data never outranks a real carrier. Demo rates are
+    //    invented, so they would otherwise win on price and be recommended.
+    option.isFictionalSample ? 1 : 0,
     // 1. Underwriting eligibility
     CATEGORY_RANK[option.category],
     // 2. Level-benefit availability
