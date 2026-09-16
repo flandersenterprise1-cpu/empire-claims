@@ -15,6 +15,11 @@ import {
   TRANSAMERICA_PRODUCTS,
   TRANSAMERICA_RULES,
 } from './transamerica';
+import {
+  FIDELITY_LIFE_CARRIER,
+  FIDELITY_LIFE_PRODUCT,
+  FIDELITY_LIFE_UNAVAILABLE_STATES,
+} from './fidelity-life';
 import { FEX_GRADED_RATES, FEX_SELECT_RATES, type FexRateRow } from './transamerica-fex-rates';
 import { STATE_CODES } from '../../lib/constants';
 
@@ -432,6 +437,91 @@ export async function loadTransamerica(db: Database, adminId: number | null) {
   console.log(
     `✓ Transamerica: ${TRANSAMERICA_PRODUCTS.length} products, ${ruleCount} draft rules, ` +
       `${FEX_SELECT_RATES.length + FEX_GRADED_RATES.length} verified rate rows, state availability configured from the published exclusions.`,
+  );
+  return carrier;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Fidelity Life Association — RAPIDecision Guaranteed Issue                   */
+/* -------------------------------------------------------------------------- */
+
+export async function loadFidelityLife(db: Database, adminId: number | null) {
+  // The seeded placeholder for this carrier was created as "InstaBrain", which
+  // is a Fidelity Life product name rather than the carrier name.
+  await resetCarrier(db, FIDELITY_LIFE_CARRIER.placeholderSlug);
+  await resetCarrier(db, FIDELITY_LIFE_CARRIER.slug);
+
+  const [carrier] = await db
+    .insert(schema.carriers)
+    .values({
+      slug: FIDELITY_LIFE_CARRIER.slug,
+      name: FIDELITY_LIFE_CARRIER.name,
+      status: 'inactive',
+      isVerified: false,
+      isFictionalSample: false,
+      notes:
+        'Previously seeded as the "InstaBrain" placeholder; InstaBrain is a Fidelity Life product name, not the carrier. Only a state availability grid was supplied for the final-expense-relevant product (RAPIDecision Guaranteed Issue), so state availability is configured and nothing else is. The InstaBrain Term Producer Guide is term life insurance ($50,000 minimum face, ages 18-60) and is out of scope for this final expense platform.',
+    })
+    .returning();
+
+  const [doc] = await db
+    .insert(schema.sourceDocuments)
+    .values({
+      carrierId: carrier.id,
+      title: FIDELITY_LIFE_CARRIER.availabilityDoc,
+      docType: 'state_availability',
+      reference: FIDELITY_LIFE_CARRIER.availabilityRef,
+      documentDate: FIDELITY_LIFE_CARRIER.availabilityAsOf,
+      notes:
+        'Every state marked Yes except Montana. New York and Wyoming are absent — the footnote states Fidelity Life Association does not do business there. Dated 07/10/2019; re-confirm before activation.',
+      uploadedByUserId: adminId,
+    })
+    .returning();
+  void doc;
+
+  const [product] = await db
+    .insert(schema.products)
+    .values({
+      carrierId: carrier.id,
+      slug: FIDELITY_LIFE_PRODUCT.slug,
+      name: FIDELITY_LIFE_PRODUCT.name,
+      benefitType: 'guaranteed_issue',
+      status: 'inactive',
+      minFaceAmount: 3000,
+      maxFaceAmount: 25000,
+      faceIncrement: 1000,
+      ageBasis: 'last_birthday',
+      minAge: 50,
+      maxAge: 85,
+      tobaccoClasses: ['unismoke'],
+      sexClasses: ['male', 'female'],
+      waitingPeriodMonths: 24,
+      simplicityScore: 5,
+      rateMethodology: 'exact_only',
+      allowInterpolation: false,
+      notes: FIDELITY_LIFE_PRODUCT.notes,
+      sortOrder: 0,
+    })
+    .returning();
+
+  await db.insert(schema.productStates).values(
+    STATE_CODES.map((code) => ({
+      productId: product.id,
+      stateCode: code,
+      isAvailable: !FIDELITY_LIFE_UNAVAILABLE_STATES.includes(code),
+      effectiveDate: FIDELITY_LIFE_CARRIER.availabilityAsOf,
+      notes: FIDELITY_LIFE_UNAVAILABLE_STATES.includes(code)
+        ? code === 'MT'
+          ? 'Marked "No" in the RAPIDecision Guaranteed Issue availability grid.'
+          : 'Fidelity Life Association does not do business in this state.'
+        : null,
+    })),
+  );
+
+  const available = STATE_CODES.length - FIDELITY_LIFE_UNAVAILABLE_STATES.length;
+  console.log(
+    `\u2713 Fidelity Life Association: 1 product, state availability configured (${available} of ${STATE_CODES.length} states). ` +
+      `No issue ages, face amounts or rates supplied \u2014 premiums will read "Rate unavailable". InstaBrain Term not loaded (term product, out of scope).`,
   );
   return carrier;
 }
