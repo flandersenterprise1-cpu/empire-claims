@@ -22,6 +22,18 @@
  * and the quoter goes up where ordinary rounding would go down (75.7925 -> 75.80,
  * 96.9850 -> 96.99). Only rounding up reproduces all three.
  *
+ * Rates vary by BOTH sex and tobacco, and neither is a flat multiplier, so all
+ * four combinations are captured. At 65, non-tobacco, a male pays 29.7% more
+ * than a female on Preferred but 34.7% more on Standard; the tobacco load is
+ * 15.8% on Preferred, 26.8% on Standard and 19.4% on Modified.
+ *
+ * A warning for whoever runs the capture: this quoter keeps showing the PREVIOUS
+ * premiums after the applicant details change, until "Update Products" is
+ * clicked. Two quotes taken this way looked identical for male and female and
+ * nearly sent a unisex table into the engine. Re-read the plan prices after
+ * every change, and if a number does not move when it should have, it did not
+ * requote.
+ *
  * Capture is in ANNUAL mode. The monthly figure is then derived rather than
  * typed, so no rounding rule has to be trusted at capture time.
  *
