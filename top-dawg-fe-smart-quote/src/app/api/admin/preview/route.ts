@@ -33,9 +33,13 @@ export const POST = route(async (request: Request) => {
   const bundles = await loadQuoteCatalog(db, {
     stateCode: intake.stateCode,
     age: intake.age,
+    ageNearestBirthday: intake.ageNearestBirthday ?? null,
     faceAmount: intake.faceAmount,
     asOf,
     includeInactive: body.includeInactive,
+    // The admin preview exists to inspect everything the platform holds,
+    // including the demo carrier, which the agent-facing quote never sees.
+    includeFictionalSample: true,
   });
 
   return ok({ quote: runSuperQuote({ intake, facts, bundles, asOf }), facts });

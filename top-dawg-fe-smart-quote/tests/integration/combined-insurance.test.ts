@@ -185,4 +185,61 @@ describeIfDb('Combined Insurance Generational Life', () => {
       expect(option!.monthlyPremium, state).toBeGreaterThan(0);
     }
   });
+  it('loads nearest-age rate rows when the client ages differently on each basis', async () => {
+    // Combined rates on age nearest birthday, everyone else on age last
+    // birthday. A client born 1961-01-01 quoted in September 2026 is 65 last
+    // birthday but 66 nearest, so the catalog has to fetch BOTH ages: fetching
+    // only the last-birthday age starves Combined of its rates entirely and it
+    // reports "Rate unavailable" despite having a full published table.
+    const intake = {
+      stateCode: 'TX',
+      age: 65,
+      ageNearestBirthday: 66,
+      sex: 'male' as const,
+      tobaccoUse: false,
+      faceAmount: 10000,
+      monthlyBudget: null,
+    };
+    const bundles = await loadQuoteCatalog(db, {
+      stateCode: intake.stateCode,
+      age: intake.age,
+      ageNearestBirthday: intake.ageNearestBirthday,
+      faceAmount: intake.faceAmount,
+      asOf: ASOF,
+    });
+    const quote = runSuperQuote({
+      intake,
+      facts: extractFacts(questions, HEALTHY_ANSWERS),
+      asOf: ASOF,
+      bundles,
+    });
+    const option = quote.options.find((o) => o.productSlug === 'generational-life-preferred');
+    expect(option).toBeDefined();
+    expect(option!.monthlyPremium).toBeGreaterThan(0);
+  });
+
+  it('still reports no rate when only the last-birthday age is fetched', async () => {
+    // The failing case this guards against, stated explicitly.
+    const bundles = await loadQuoteCatalog(db, {
+      stateCode: 'TX',
+      age: 65,
+      faceAmount: 10000,
+      asOf: ASOF,
+    });
+    const bundle = bundles.find((b) => b.product.slug === 'generational-life-preferred')!;
+    const rate = findRate(
+      bundle,
+      {
+        stateCode: 'TX',
+        age: 65,
+        ageNearestBirthday: 66,
+        sex: 'male',
+        tobaccoUse: false,
+        faceAmount: 10000,
+        monthlyBudget: null,
+      },
+      ASOF,
+    );
+    expect(rate.status).toBe('unavailable');
+  });
 });

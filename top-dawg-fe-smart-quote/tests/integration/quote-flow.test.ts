@@ -69,7 +69,7 @@ describeIfDb('quote flow (FICTIONAL sample carrier)', () => {
     });
     await saveHealthAnswers(db, session.id, answers);
     const reloaded = await getQuoteSession(db, session.id);
-    return generateSuperQuote(db, reloaded!, { asOf: ASOF });
+    return generateSuperQuote(db, reloaded!, { asOf: ASOF, includeFictionalSample: true });
   }
 
   it('gives a healthy 62-year-old a strong level match with a graded backup', async () => {

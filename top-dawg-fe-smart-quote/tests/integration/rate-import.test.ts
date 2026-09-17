@@ -77,6 +77,7 @@ describeIfDb('rate table import and publishing', () => {
       age: INTAKE.age,
       faceAmount: INTAKE.faceAmount,
       asOf: ASOF,
+      includeFictionalSample: true,
     });
     return bundles.find((b) => b.product.id === productId)!;
   }
@@ -145,6 +146,7 @@ describeIfDb('rate table import and publishing', () => {
       age: 66,
       faceAmount: 13000,
       asOf: ASOF,
+      includeFictionalSample: true,
     });
     const bundle = bundles.find((b) => b.product.id === productId)!;
     const rate = findRate(bundle, { ...INTAKE, faceAmount: 13000 }, ASOF);

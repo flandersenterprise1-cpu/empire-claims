@@ -244,6 +244,7 @@ describeIfDb('draft and expired rules are invisible to the engine', () => {
         age: 65,
         faceAmount: 10000,
         asOf: '2026-06-01',
+        includeFictionalSample: true,
       });
       return bundles.find((b) => b.product.id === product.id)!;
     };

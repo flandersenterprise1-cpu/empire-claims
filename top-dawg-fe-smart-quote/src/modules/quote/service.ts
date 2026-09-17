@@ -143,7 +143,13 @@ export interface SuperQuoteOutcome {
 export async function generateSuperQuote(
   db: Db,
   session: QuoteSessionRow,
-  options: { persist?: boolean; includeInactive?: boolean; asOf?: string } = {},
+  options: {
+    persist?: boolean;
+    includeInactive?: boolean;
+    /** Opt-in for the admin preview and the engine tests; never the agent flow. */
+    includeFictionalSample?: boolean;
+    asOf?: string;
+  } = {},
 ): Promise<SuperQuoteOutcome> {
   const asOf = options.asOf ?? today();
   const intake = intakeFromSession(session);
@@ -156,9 +162,11 @@ export async function generateSuperQuote(
   const bundles = await loadQuoteCatalog(db, {
     stateCode: intake.stateCode,
     age: intake.age,
+    ageNearestBirthday: intake.ageNearestBirthday ?? null,
     faceAmount: intake.faceAmount,
     asOf,
     includeInactive: options.includeInactive ?? false,
+    includeFictionalSample: options.includeFictionalSample ?? false,
   });
 
   const quote = runSuperQuote({ intake, facts, bundles, asOf });

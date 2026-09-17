@@ -22,19 +22,51 @@ export type Db = PostgresJsDatabase<typeof schema>;
 export interface CatalogQuery {
   stateCode: string;
   age: number;
+  /**
+   * Age nearest birthday, when a date of birth was given.
+   *
+   * Carriers do not agree on how to age a client: most rate on age last
+   * birthday, but some (Combined, for one) rate on age nearest birthday, which
+   * is up to a year higher. Rate rows for BOTH ages therefore have to be
+   * loaded, because which one a product needs is a property of the product.
+   * Loading only the last-birthday age silently starves every nearest-birthday
+   * product of its rates and they all report "Rate unavailable".
+   */
+  ageNearestBirthday?: number | null;
   faceAmount: number;
   asOf: string;
   /** Admin preview can look at products that are not live yet. */
   includeInactive?: boolean;
+  /**
+   * Whether the clearly-labelled FICTIONAL demo carrier may take part.
+   *
+   * It exists so the engine can be demonstrated and tested without real
+   * carrier data, and its rates are invented. It must never reach an agent
+   * quoting a real client, so it is excluded unless a caller asks for it --
+   * the admin preview and the engine tests do, the quote flow does not.
+   */
+  includeFictionalSample?: boolean;
 }
 
 export async function loadQuoteCatalog(db: Db, query: CatalogQuery): Promise<ProductBundle[]> {
-  const { stateCode, age, faceAmount, includeInactive = false } = query;
+  const {
+    stateCode,
+    age,
+    ageNearestBirthday,
+    faceAmount,
+    includeInactive = false,
+    includeFictionalSample = false,
+  } = query;
+  const ages = [...new Set([age, ageNearestBirthday].filter((a): a is number => a != null))];
 
   const carrierRows = await db.select().from(schema.carriers);
   const productRows = await db.select().from(schema.products);
 
-  const visibleCarriers = carrierRows.filter((c) => includeInactive || c.status === 'active');
+  const visibleCarriers = carrierRows.filter(
+    (c) =>
+      (includeInactive || c.status === 'active') &&
+      (includeFictionalSample || !c.isFictionalSample),
+  );
   const carrierIds = visibleCarriers.map((c) => c.id);
   if (carrierIds.length === 0) return [];
 
@@ -115,7 +147,7 @@ export async function loadQuoteCatalog(db: Db, query: CatalogQuery): Promise<Pro
         .where(
           and(
             inArray(schema.rateEntries.rateTableId, rateTableIds),
-            eq(schema.rateEntries.age, age),
+            inArray(schema.rateEntries.age, ages),
             or(
               eq(schema.rateEntries.faceAmount, faceAmount),
               eq(schema.rateEntries.faceAmount, 0), // per-$1,000 sentinel rows
