@@ -968,8 +968,11 @@ export async function loadAflac(db: Database, adminId: number | null) {
         ageBasis: 'last_birthday',
         minAge: spec.minAge,
         maxAge: spec.maxAge,
-        // The sales guide describes no tobacco distinction for these plans.
-        tobaccoClasses: ['unismoke'],
+        // The rate quoter asks "Have you used any form of tobacco in the past
+        // 12 months? (Including vaping and e-cigarettes)" as a required field
+        // and states the plan depends on smoking status, so these rate by
+        // tobacco class even though the sales guide never mentions it.
+        tobaccoClasses: ['non_tobacco', 'tobacco'],
         sexClasses: ['male', 'female'],
         waitingPeriodMonths: spec.waitingPeriodMonths,
         simplicityScore: 5,
