@@ -72,7 +72,7 @@ describeIfDb('bulk rule review', () => {
         .select()
         .from(schema.auditLog)
         .where(
-          and(eq(schema.auditLog.entityType, 'underwriting_rule'), eq(schema.auditLog.entityId, id)),
+          and(eq(schema.auditLog.entityType, 'underwriting_rule'), eq(schema.auditLog.entityId, String(id))),
         );
       expect(audits.some((a) => a.action === 'rule.verified')).toBe(true);
     }

@@ -10,6 +10,16 @@ import * as schema from '../schema';
 import { AIG_CARRIER, AIG_PRODUCTS, AIG_RULES, aigExplanation } from './aig-corebridge';
 import { CICA_CARRIER, CICA_PRODUCTS, CICA_RULES, cicaExplanation } from './cica-life';
 import {
+  CICA_APPROVED_STATES,
+  CICA_GUARANTEED_FACE_BANDS,
+  CICA_GUARANTEED_RATES,
+  CICA_PARTIAL_STATES,
+  CICA_STANDARD_FACE_BANDS,
+  CICA_STANDARD_RATES,
+  type CicaFaceBand,
+  type CicaRateRow,
+} from './cica-rates';
+import {
   TRANSAMERICA_CARRIER,
   TRANSAMERICA_EXCLUDED_STATES,
   TRANSAMERICA_PRODUCTS,
@@ -67,7 +77,7 @@ export async function loadCicaLife(db: Database, adminId: number | null) {
       isVerified: false,
       isFictionalSample: false,
       notes:
-        'Superior Choice loaded from the Risk Assessment Guide (AG-CLA-JULY-2025-130), the Benefits At A Glance sheet and the Corporate Brochure. OUTSTANDING before activation: face amounts, premium rates and state availability — none of the three supplied documents contain them.',
+        'Superior Choice loaded from the Risk Assessment Guide (AG-CLA-JULY-2025-130), the Benefits At A Glance sheet, the Corporate Brochure and the CICA Life of America Agent Guide (May 2026). Annual rates, issue-age face bands and state approvals all come from the Agent Guide. OUTSTANDING before activation: the annual policy fee and the modal factors — the Agent Guide prints neither, so a monthly premium cannot be produced and the engine will show \'Rate unavailable\'.',
     })
     .returning();
 
@@ -94,8 +104,8 @@ export async function loadCicaLife(db: Database, adminId: number | null) {
         name: spec.name,
         benefitType: spec.benefitType,
         status: 'inactive',
-        minFaceAmount: 3000,
-        maxFaceAmount: 25000,
+        minFaceAmount: 1000,
+        maxFaceAmount: spec.slug.endsWith('guaranteed-issue') ? 30000 : 30000,
         faceIncrement: 1000,
         ageBasis: 'last_birthday',
         minAge: 0,
@@ -112,6 +122,82 @@ export async function loadCicaLife(db: Database, adminId: number | null) {
       })
       .returning();
     productIds.push(product.id);
+
+    // Face amounts narrow with age, so they are age bands rather than one
+    // range. Agent Guide p.36.
+    const bands: CicaFaceBand[] = spec.slug.endsWith('guaranteed-issue')
+      ? CICA_GUARANTEED_FACE_BANDS
+      : CICA_STANDARD_FACE_BANDS;
+    for (const band of bands) {
+      await db.insert(schema.productFaceLimits).values({
+        productId: product.id,
+        minAge: band.minAge,
+        maxAge: band.maxAge,
+        minFaceAmount: band.minFaceAmount,
+        maxFaceAmount: band.maxFaceAmount,
+        stateCode: null,
+        notes: 'Agent Guide p.36, issue-age band.',
+      });
+    }
+
+    // Agent Guide pp.14-15. Utah and Wisconsin carry partial marks that the
+    // grid does not resolve to a plan, so they are held unavailable with the
+    // reason recorded rather than guessed either way.
+    const partial = new Map(CICA_PARTIAL_STATES.map((p) => [p.code, p.marks]));
+    await db.insert(schema.productStates).values(
+      STATE_CODES.map((code) => ({
+        productId: product.id,
+        stateCode: code,
+        isAvailable: CICA_APPROVED_STATES.includes(code),
+        effectiveDate: CICA_CARRIER.effectiveDate,
+        notes: CICA_APPROVED_STATES.includes(code)
+          ? null
+          : partial.has(code)
+            ? `The state approval grid marks only ${partial.get(code)} of its 4 columns and does not say which plans. Held unavailable until CICA confirms.`
+            : 'Carries no marks in the Agent Guide state approval grid (pp.14-15).',
+      })),
+    );
+
+    // Annual rate per $1,000 by issue age and sex, Agent Guide pp.46-48. No
+    // modal factor is published, so no monthly premium can be derived; the
+    // table loads with an annual basis and the engine reports the gap rather
+    // than inventing a figure.
+    const rateRows: CicaRateRow[] = spec.slug.endsWith('guaranteed-issue')
+      ? CICA_GUARANTEED_RATES
+      : CICA_STANDARD_RATES;
+    const [rateTable] = await db
+      .insert(schema.rateTables)
+      .values({
+        productId: product.id,
+        stateCode: null,
+        benefitType: spec.benefitType,
+        effectiveDate: CICA_CARRIER.effectiveDate,
+        status: 'draft',
+        version: 1,
+        monthlyPolicyFee: '0',
+        rateBasis: 'annual_per_thousand',
+        annualPolicyFee: '0',
+        // Deliberately null: the Agent Guide publishes no modal factor, and
+        // the rate engine refuses to price an annual_per_thousand table
+        // without one rather than assume a conversion.
+        monthlyModalFactor: null,
+        sourceDocumentId: doc.id,
+        sourcePage: 'pp.46-48',
+        notes:
+          'Annual premium rate per $1,000, Agent Guide pp.46-48. POLICY FEE AND MODAL FACTORS NOT PUBLISHED — both must be supplied by CICA before this table can produce a monthly premium.',
+        createdByUserId: adminId,
+      })
+      .returning();
+
+    const entries = rateRows.flatMap(([age, male, female]) => [
+      { rateTableId: rateTable.id, age, sex: 'male' as const, tobaccoClass: 'unismoke' as const,
+        faceAmount: 0, monthlyPremium: '0', annualPremium: null, ratePerThousand: String(male) },
+      { rateTableId: rateTable.id, age, sex: 'female' as const, tobaccoClass: 'unismoke' as const,
+        faceAmount: 0, monthlyPremium: '0', annualPremium: null, ratePerThousand: String(female) },
+    ]);
+    for (let i = 0; i < entries.length; i += 500) {
+      await db.insert(schema.rateEntries).values(entries.slice(i, i + 500));
+    }
   }
 
   let ruleCount = 0;
@@ -147,7 +233,10 @@ export async function loadCicaLife(db: Database, adminId: number | null) {
   }
 
   console.log(
-    `✓ CICA Life: ${CICA_PRODUCTS.length} products, ${ruleCount} draft rules. No face amounts or rates supplied — premiums will read "Rate unavailable".`,
+    `\u2713 CICA Life: ${CICA_PRODUCTS.length} products, ${ruleCount} draft rules, ` +
+      `${(CICA_STANDARD_RATES.length + CICA_GUARANTEED_RATES.length) * 2} annual rate rows, ` +
+      `approved in ${CICA_APPROVED_STATES.length} of ${STATE_CODES.length} jurisdictions. ` +
+      `No policy fee or modal factor published \u2014 monthly premiums will read "Rate unavailable".`,
   );
   return carrier;
 }
