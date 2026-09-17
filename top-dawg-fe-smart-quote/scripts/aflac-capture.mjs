@@ -85,7 +85,7 @@ function template(outPath) {
   console.log(`Wrote ${rows.length} rows to ${outPath}`);
   console.log(`Set the quoter to ANNUAL mode and the benefit to $${LOW_FACE.toLocaleString()}.`);
   console.log('One screen fills one row: read the three plan prices into the _10k columns.');
-  console.log(`The _20k columns are an optional cross-check -- leave them blank.`);
+  console.log('Either column works; filling both makes the build cross-check them.');
   console.log('Modified stops at issue age 75; leave its columns blank above that.');
 }
 
@@ -117,22 +117,25 @@ function build(inPath, outPath) {
         problems.push(`line ${lineNo}: ${plan.label} is not issued at age ${age} (${plan.minAge}-${plan.maxAge})`);
         continue;
       }
-      if (low === null) {
-        problems.push(`line ${lineNo}: ${plan.label} has a $${HIGH_FACE.toLocaleString()} premium but no $${LOW_FACE.toLocaleString()} one`);
-        continue;
-      }
-      if (!Number.isFinite(low) || low <= ANNUAL_FEE) {
-        problems.push(`line ${lineNo}: ${plan.label} premium "${get(`${plan.key}_10k`)}" is not usable`);
-        continue;
-      }
+      // Either face amount determines the cell, so whichever is filled in is
+      // used. When both are, they must agree: a disagreement means either a
+      // mistyped premium or a rate band, and neither may be averaged away.
+      const rateOf = (annual, face) =>
+        Math.round(((annual - ANNUAL_FEE) / (face / 1000)) * 100) / 100;
 
-      const lowRate = Math.round(((low - ANNUAL_FEE) / (LOW_FACE / 1000)) * 100) / 100;
+      for (const [annual, face, column] of [
+        [low, LOW_FACE, `${plan.key}_10k`],
+        [high, HIGH_FACE, `${plan.key}_20k`],
+      ]) {
+        if (annual !== null && (!Number.isFinite(annual) || annual <= ANNUAL_FEE)) {
+          problems.push(`line ${lineNo}: ${plan.label} premium "${get(column)}" is not usable`);
+        }
+      }
+      if (problems.length) continue;
 
-      // The $20,000 column is optional. When it is filled in it must agree,
-      // because a disagreement means either a mistyped premium or a rate band,
-      // and neither may be averaged away.
-      if (high !== null) {
-        const highRate = Math.round(((high - ANNUAL_FEE) / (HIGH_FACE / 1000)) * 100) / 100;
+      const lowRate = low !== null ? rateOf(low, LOW_FACE) : rateOf(high, HIGH_FACE);
+      if (low !== null && high !== null) {
+        const highRate = rateOf(high, HIGH_FACE);
         if (Math.abs(lowRate - highRate) > 0.01) {
           problems.push(
             `line ${lineNo}: ${plan.label} is not linear -- $${LOW_FACE.toLocaleString()} implies ` +
@@ -141,11 +144,13 @@ function build(inPath, outPath) {
           continue;
         }
       }
+      const faceUsed = low !== null ? LOW_FACE : HIGH_FACE;
+      const annualUsed = low !== null ? low : high;
 
       if (!bySlug.has(plan.slug)) bySlug.set(plan.slug, []);
       bySlug.get(plan.slug).push({
-        age, sex, tobaccoClass, faceAmount: LOW_FACE,
-        monthly: monthlyFrom(low), annual: low, rate: lowRate,
+        age, sex, tobaccoClass, faceAmount: faceUsed,
+        monthly: monthlyFrom(annualUsed), annual: annualUsed, rate: lowRate,
       });
     }
   });
