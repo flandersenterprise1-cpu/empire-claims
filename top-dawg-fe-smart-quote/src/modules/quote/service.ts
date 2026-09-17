@@ -36,6 +36,7 @@ export async function createQuoteSession(db: Db, basics: ClientBasics): Promise<
       id: nanoid(21),
       stateCode: basics.stateCode,
       age: basics.age,
+      ageNearestBirthday: basics.ageNearestBirthday ?? null,
       sex: basics.sex,
       tobaccoUse: basics.tobaccoUse,
       faceAmount: basics.faceAmount,
@@ -69,6 +70,7 @@ export async function updateQuoteBasics(
     .set({
       stateCode: basics.stateCode,
       age: basics.age,
+      ageNearestBirthday: basics.ageNearestBirthday ?? null,
       sex: basics.sex,
       tobaccoUse: basics.tobaccoUse,
       faceAmount: basics.faceAmount,
@@ -125,6 +127,7 @@ export function intakeFromSession(session: QuoteSessionRow): ClientIntake {
   return {
     stateCode: session.stateCode,
     age: session.age,
+    ageNearestBirthday: session.ageNearestBirthday ?? null,
     sex: session.sex === 'unisex' ? 'male' : session.sex,
     tobaccoUse: session.tobaccoUse,
     faceAmount: session.faceAmount,

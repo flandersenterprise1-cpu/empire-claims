@@ -527,6 +527,8 @@ export const quoteSessions = pgTable(
     id: varchar('id', { length: 32 }).primaryKey(),
     stateCode: varchar('state_code', { length: 2 }),
     age: integer('age'),
+    /** Age nearest birthday, when a date of birth was entered. */
+    ageNearestBirthday: integer('age_nearest_birthday'),
     sex: sexEnum('sex'),
     tobaccoUse: boolean('tobacco_use'),
     faceAmount: integer('face_amount'),

@@ -21,6 +21,7 @@ export const POST = route(async (request: Request) => {
   const intake = {
     stateCode: body.stateCode,
     age: body.age,
+    ageNearestBirthday: body.ageNearestBirthday ?? null,
     sex: body.sex,
     tobaccoUse: body.tobaccoUse,
     faceAmount: body.faceAmount,

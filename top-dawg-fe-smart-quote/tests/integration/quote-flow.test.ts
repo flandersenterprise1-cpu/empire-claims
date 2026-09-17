@@ -58,10 +58,15 @@ describeIfDb('quote flow (FICTIONAL sample carrier)', () => {
       tobaccoUse: boolean;
       faceAmount: number;
       monthlyBudget?: number | null;
+      ageNearestBirthday?: number | null;
     },
     answers: Record<string, unknown>,
   ) {
-    const session = await createQuoteSession(db, { monthlyBudget: null, ...basics });
+    const session = await createQuoteSession(db, {
+      monthlyBudget: null,
+      ageNearestBirthday: null,
+      ...basics,
+    });
     await saveHealthAnswers(db, session.id, answers);
     const reloaded = await getQuoteSession(db, session.id);
     return generateSuperQuote(db, reloaded!, { asOf: ASOF });
@@ -202,6 +207,7 @@ describeIfDb('quote flow (FICTIONAL sample carrier)', () => {
     const session = await createQuoteSession(db, {
       stateCode: 'TX',
       age: 62,
+      ageNearestBirthday: null,
       sex: 'female',
       tobaccoUse: false,
       faceAmount: 10000,
@@ -218,6 +224,7 @@ describeIfDb('quote flow (FICTIONAL sample carrier)', () => {
     const session = await createQuoteSession(db, {
       stateCode: 'TX',
       age: 62,
+      ageNearestBirthday: null,
       sex: 'female',
       tobaccoUse: false,
       faceAmount: 10000,
@@ -240,6 +247,7 @@ describeIfDb('quote flow (FICTIONAL sample carrier)', () => {
     const session = await createQuoteSession(db, {
       stateCode: 'TX',
       age: 62,
+      ageNearestBirthday: null,
       sex: 'female',
       tobaccoUse: false,
       faceAmount: 10000,

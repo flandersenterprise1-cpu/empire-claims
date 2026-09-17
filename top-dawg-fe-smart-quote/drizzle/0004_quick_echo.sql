@@ -1,0 +1,1 @@
+ALTER TABLE "quote_sessions" ADD COLUMN "age_nearest_birthday" integer;

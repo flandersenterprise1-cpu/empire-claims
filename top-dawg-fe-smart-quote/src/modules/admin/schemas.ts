@@ -196,6 +196,7 @@ export const rateImportSchema = z.object({
 export const previewSchema = z.object({
   stateCode,
   age: z.coerce.number().int().min(0).max(120),
+  ageNearestBirthday: z.coerce.number().int().min(0).max(120).nullish(),
   sex: z.enum(['male', 'female']),
   tobaccoUse: z.boolean(),
   faceAmount: z.coerce.number().int().min(1000).max(100_000),

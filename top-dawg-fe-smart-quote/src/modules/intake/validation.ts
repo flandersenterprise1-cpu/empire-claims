@@ -33,6 +33,23 @@ export function ageFromDateOfBirth(dob: string, asOf: Date = new Date()): number
   return age;
 }
 
+/**
+ * Age nearest birthday: the age the client is closest to. Someone 55 years and
+ * 7 months old rates as 56. Carriers differ on which they use — Combined
+ * Insurance rates on nearest age, American Amicable and Transamerica on last
+ * birthday — so both are worked out and the product decides which applies.
+ */
+export function ageNearestBirthday(dob: string, asOf: Date = new Date()): number {
+  // The age the client will be six months from now: exactly the age they are
+  // nearest to. Using calendar months rather than an average month length keeps
+  // the boundary exact — Combined's own example is that 45 years and 6 months
+  // rates as 46.
+  const sixMonthsOn = new Date(
+    Date.UTC(asOf.getUTCFullYear(), asOf.getUTCMonth() + 6, asOf.getUTCDate()),
+  );
+  return ageFromDateOfBirth(dob, sixMonthsOn);
+}
+
 export const clientBasicsSchema = z
   .object({
     stateCode: stateCodeSchema,
@@ -63,9 +80,12 @@ export const clientBasicsSchema = z
   })
   .transform((data) => {
     const age = data.age ?? ageFromDateOfBirth(data.dateOfBirth!);
+    // Only derivable from a date of birth. Null when an age was typed in.
+    const nearest = data.dateOfBirth ? ageNearestBirthday(data.dateOfBirth) : null;
     return {
       stateCode: data.stateCode,
       age,
+      ageNearestBirthday: nearest,
       sex: data.sex,
       tobaccoUse: data.tobaccoUse,
       faceAmount: data.faceAmount,

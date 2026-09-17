@@ -64,58 +64,45 @@ describeIfDb('Combined Insurance Generational Life', () => {
     await sql?.end();
   });
 
-  async function bundle(slug: string) {
-    const bundles = await loadQuoteCatalog(db, {
-      stateCode: 'TX',
-      age: INTAKE.age,
-      faceAmount: INTAKE.faceAmount,
-      asOf: ASOF,
-    });
+  async function bundle(slug: string, age = INTAKE.age, faceAmount = INTAKE.faceAmount) {
+    const bundles = await loadQuoteCatalog(db, { stateCode: 'TX', age, faceAmount, asOf: ASOF });
     return bundles.find((b) => b.product.slug === slug)!;
   }
 
-  it('refuses to quote on age last birthday when the product rates on nearest age', async () => {
+  it('still refuses to quote from an age last birthday, because Combined rates on nearest age', async () => {
     const rate = findRate(await bundle('generational-life-preferred'), INTAKE, ASOF);
     expect(rate.status).toBe('unavailable');
     expect(rate.reason).toContain('age nearest birthday');
   });
 
-  it('still refuses once a nearest-birthday age is supplied, because no modal factor is published', async () => {
+  /**
+   * The Producer Guide never publishes the annual-to-monthly modal factor. It
+   * was derived from Combined's own agent quoter, which for a male aged 55,
+   * non-smoker, $10,000 level in Alabama returns:
+   *   Preferred $38.55 · Standard $42.93 · Sub-Standard $48.16 · Graded $58.31
+   * All four must reproduce exactly, or the factor is wrong.
+   */
+  it.each([
+    ['generational-life-preferred', 38.55],
+    ['generational-life-standard', 42.93],
+    ['generational-life-substandard', 48.16],
+    ['generational-life-graded', 58.31],
+  ])('reproduces the carrier quoter for %s: $%s/mo', async (slug, expected) => {
     const rate = findRate(
-      await bundle('generational-life-preferred'),
-      { ...INTAKE, ageNearestBirthday: 65 },
-      ASOF,
-    );
-    expect(rate.status).toBe('unavailable');
-    expect(rate.monthlyPremium).toBeUndefined();
-  });
-
-  it('produces the carrier premium as soon as the published modal factor is entered', async () => {
-    // An administrator entering the factor is the only thing standing between
-    // the stored rates and a real quote.
-    const [product] = await db
-      .select()
-      .from(schema.products)
-      .where(eq(schema.products.slug, 'generational-life-preferred'))
-      .limit(1);
-    await db
-      .update(schema.rateTables)
-      .set({ monthlyModalFactor: '0.0875' })
-      .where(eq(schema.rateTables.productId, product.id));
-
-    const rate = findRate(
-      await bundle('generational-life-preferred'),
-      { ...INTAKE, ageNearestBirthday: 65 },
+      await bundle(slug as string, 55, 10000),
+      {
+        stateCode: 'TX',
+        age: 55,
+        ageNearestBirthday: 55,
+        sex: 'male',
+        tobaccoUse: false,
+        faceAmount: 10000,
+        monthlyBudget: null,
+      },
       ASOF,
     );
     expect(rate.status).toBe('found');
-    // Age 65 Preferred non-tobacco male = 68.38 per $1,000, $50 annual fee.
-    expect(rate.monthlyPremium).toBe(Math.round((68.38 * 10 + 50) * 0.0875 * 100) / 100);
-
-    await db
-      .update(schema.rateTables)
-      .set({ monthlyModalFactor: null })
-      .where(eq(schema.rateTables.productId, product.id));
+    expect(rate.monthlyPremium).toBe(expected);
   });
 
   it('stores all four rating classes so the agent can see the price range', async () => {

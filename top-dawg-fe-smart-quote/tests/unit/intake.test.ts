@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { ageFromDateOfBirth, clientBasicsSchema } from '@/modules/intake/validation';
+import {
+  ageFromDateOfBirth,
+  ageNearestBirthday,
+  clientBasicsSchema,
+} from '@/modules/intake/validation';
 
 const BASE = {
   stateCode: 'tx',
@@ -57,6 +61,7 @@ describe('client basics validation', () => {
     });
     expect(Object.keys(parsed).sort()).toEqual([
       'age',
+      'ageNearestBirthday',
       'faceAmount',
       'monthlyBudget',
       'sex',
@@ -69,5 +74,47 @@ describe('client basics validation', () => {
     const asOf = new Date('2026-01-14T00:00:00Z');
     expect(ageFromDateOfBirth('1960-01-15', asOf)).toBe(65);
     expect(ageFromDateOfBirth('1960-01-14', asOf)).toBe(66);
+  });
+});
+
+describe('age nearest birthday', () => {
+  it('uses the last-birthday age within six months of the birthday', () => {
+    // Born 15 Jan 1970, quoted 1 Apr 2026 — turned 56 less than 6 months ago.
+    expect(ageNearestBirthday('1970-01-15', new Date('2026-04-01T00:00:00Z'))).toBe(56);
+    expect(ageFromDateOfBirth('1970-01-15', new Date('2026-04-01T00:00:00Z'))).toBe(56);
+  });
+
+  it('rounds up once more than six months past the birthday', () => {
+    // Same client quoted 1 Oct 2026 — 8 months past, so rates as 57.
+    expect(ageNearestBirthday('1970-01-15', new Date('2026-10-01T00:00:00Z'))).toBe(57);
+    expect(ageFromDateOfBirth('1970-01-15', new Date('2026-10-01T00:00:00Z'))).toBe(56);
+  });
+
+  it('matches the example Combined prints on its own quoter', () => {
+    // "If you are 45 years and 6 months old, you will be rated as a 46 year old."
+    expect(ageNearestBirthday('1981-01-01', new Date('2026-07-01T00:00:00Z'))).toBe(46);
+  });
+
+  it('is carried through client basics when a date of birth is given', () => {
+    const parsed = clientBasicsSchema.parse({
+      stateCode: 'TX',
+      dateOfBirth: '1970-01-15',
+      sex: 'male',
+      tobaccoUse: false,
+      faceAmount: 10000,
+    });
+    expect(parsed.ageNearestBirthday).not.toBeNull();
+    expect(Math.abs(parsed.ageNearestBirthday! - parsed.age)).toBeLessThanOrEqual(1);
+  });
+
+  it('is null when only an age was typed in, so nearest-age carriers refuse to quote', () => {
+    const parsed = clientBasicsSchema.parse({
+      stateCode: 'TX',
+      age: 65,
+      sex: 'male',
+      tobaccoUse: false,
+      faceAmount: 10000,
+    });
+    expect(parsed.ageNearestBirthday).toBeNull();
   });
 });

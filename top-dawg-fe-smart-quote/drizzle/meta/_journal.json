@@ -29,6 +29,13 @@
       "when": 1789585141485,
       "tag": "0003_abnormal_master_chief",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1789604924472,
+      "tag": "0004_quick_echo",
+      "breakpoints": true
     }
   ]
 }

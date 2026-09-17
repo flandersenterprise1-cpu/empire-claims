@@ -411,7 +411,7 @@ export async function loadCombinedInsurance(db: Database, adminId: number | null
       isVerified: false,
       isFictionalSample: false,
       notes:
-        'Generational Life loaded from the Producer Guide (500202-R2) and the Generational Life Underwriting Guide. OUTSTANDING before activation: (1) the annual-to-monthly modal factor — neither document publishes it, so no monthly premium can be produced; (2) whether the $50 policy fee is annual or monthly; (3) state availability; (4) date of birth capture, because this carrier rates on age NEAREST birthday.',
+        'Generational Life loaded from the Producer Guide (500202-R2) and the Generational Life Underwriting Guide. Rates are live: the modal factor (0.0833) and the annual $50 policy fee were confirmed against the carrier agent quoter. OUTSTANDING before activation: state availability, and verification of the underwriting and medication rules.',
     })
     .returning();
 
@@ -483,12 +483,16 @@ export async function loadCombinedInsurance(db: Database, adminId: number | null
         monthlyPolicyFee: '0',
         rateBasis: 'annual_per_thousand',
         annualPolicyFee: '50',
-        monthlyModalFactor: null,
+        // Derived from Combined's own agent quoter: male 55 non-smoker $10,000
+        // in Alabama returns $38.55 / $42.93 / $48.16 / $58.31 for Preferred /
+        // Standard / Sub-Standard / Graded. All four reproduce to the cent as
+        // (annual rate per $1,000 x units + $50 annual fee) x 0.0833.
+        monthlyModalFactor: '0.0833',
         sourceDocumentId: producerDoc.id,
         sourcePage: 'pp.9-11',
         isFictionalSample: false,
         notes:
-          'Annual rates per $1,000, based on age NEAREST birthday. The monthly modal factor is not published in the Producer Guide — until it is entered here no monthly premium can be produced. The $50 policy fee is recorded as annual; the guide does not state the basis.',
+          'Annual rates per $1,000, based on age NEAREST birthday. Monthly premium = (rate x units + $50 annual policy fee) x 0.0833. The Producer Guide does not publish the modal factor; it was derived from the carrier agent quoter and verified against four quoted premiums, which it reproduces exactly.',
         createdByUserId: adminId,
       })
       .returning();
@@ -618,7 +622,7 @@ export async function loadCombinedInsurance(db: Database, adminId: number | null
   console.log(
     `\u2713 Combined Insurance: ${COMBINED_PRODUCTS.length} products, ${ruleCount} draft rules, ` +
       `${medCount} draft medication rules, ${GENERATIONAL_LIFE_RATES.length * 4} rate rows per product. ` +
-      `No modal factor published \u2014 premiums will read "Rate unavailable".`,
+      `Modal factor 0.0833 confirmed against the carrier quoter \u2014 premiums are live once published.`,
   );
   return carrier;
 }
