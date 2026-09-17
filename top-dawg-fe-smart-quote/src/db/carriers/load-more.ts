@@ -13,7 +13,7 @@ import {
   TRANSAMERICA_CARRIER,
   TRANSAMERICA_EXCLUDED_STATES,
   TRANSAMERICA_PRODUCTS,
-  TRANSAMERICA_RULES,
+  TRANSAMERICA_CONDITION_RULES,
 } from './transamerica';
 import {
   FIDELITY_LIFE_CARRIER,
@@ -406,7 +406,7 @@ export async function loadTransamerica(db: Database, adminId: number | null) {
   }
 
   let ruleCount = 0;
-  for (const rule of TRANSAMERICA_RULES) {
+  for (const rule of TRANSAMERICA_CONDITION_RULES) {
     await insertRule(
       db,
       {
@@ -420,6 +420,8 @@ export async function loadTransamerica(db: Database, adminId: number | null) {
         benefitClassification: rule.benefitClassification ?? null,
         explanation: rule.explanation,
         underwritingConcern: rule.underwritingConcern ?? null,
+        treatment: rule.treatment ?? null,
+        lookbackMonths: rule.lookbackMonths ?? null,
         priority: rule.priority,
         sourceDocumentId: agentDoc.id,
         sourcePage: rule.sourcePage.slice(0, 40),

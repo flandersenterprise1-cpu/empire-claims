@@ -227,4 +227,90 @@ describeIfDb('Transamerica FE Express Solution (real carrier data)', () => {
     expect(nt.status).toBe('found');
     expect(t.monthlyPremium).toBe(nt.monthlyPremium);
   });
+  /* ------------- Adult Single Condition Decision Chart pp.10-13 ------------ */
+
+  async function categoriesFor(extra: Record<string, unknown>) {
+    const intake = {
+      stateCode: 'TX',
+      age: 60,
+      sex: 'male' as const,
+      tobaccoUse: false,
+      faceAmount: 10000,
+      monthlyBudget: null,
+    };
+    const bundles = await loadQuoteCatalog(db, {
+      stateCode: intake.stateCode,
+      age: intake.age,
+      faceAmount: intake.faceAmount,
+      asOf: ASOF,
+    });
+    const quote = runSuperQuote({
+      intake,
+      facts: extractFacts(questions, { ...HEALTHY_ANSWERS, ...extra }),
+      asOf: ASOF,
+      bundles,
+    });
+    const category = (slug: string) =>
+      quote.options.find((o) => o.productSlug === slug)?.category ??
+      quote.unavailable.find((o) => o.productSlug === slug)?.exclusions.map((e) => e.code).join(',');
+    return {
+      level: category('fe-express-solution'),
+      graded: category('graded-fe-express-solution'),
+      quote,
+    };
+  }
+
+  it('declines Alzheimer\u2019s on both Express plans', async () => {
+    const { level, graded, quote } = await categoriesFor({
+      neurological_present: true,
+      neurological_conditions: ['alzheimers'],
+      neurological_diagnosed_months: 30,
+    });
+    expect(level).toBe('do_not_submit');
+    expect(graded).toBe('do_not_submit');
+
+    const driver = quote.options.find((o) => o.productSlug === 'fe-express-solution')!.trace[0];
+    expect(driver.conditionCode).toBe('neurological');
+    expect(driver.result).toBe('decline');
+    expect(driver.sourcePage).toBe('pp.10-12');
+  });
+
+  it('grades cancer whose treatment finished 2-4 years ago', async () => {
+    const { level, graded } = await categoriesFor({
+      cancer_present: true,
+      cancer_type: 'breast',
+      cancer_treatment_status: 'completed',
+      cancer_diagnosed_months: 48,
+      cancer_last_treatment_months: 30,
+    });
+    expect(level).toBe('do_not_submit');
+    expect(graded).toBe('likely_graded');
+  });
+
+  it('leaves the level plan open when cancer treatment is 4+ years past', async () => {
+    const { level } = await categoriesFor({
+      cancer_present: true,
+      cancer_type: 'breast',
+      cancer_treatment_status: 'completed',
+      cancer_diagnosed_months: 90,
+      cancer_last_treatment_months: 72,
+      cancer_recurrence: false,
+    });
+    expect(level).toBe('strong_level');
+  });
+
+  it('applies the Adult Build Chart BMI bands from p.13', async () => {
+    // 5'8" / 170 lb = BMI 25.8 -> inside the 18.500-46.000 Select band.
+    expect((await categoriesFor({})).level).toBe('strong_level');
+
+    // 5'8" / 310 lb = BMI 47.1 -> the 46.001-48.000 Graded band.
+    const heavy = await categoriesFor({ build_height_weight: { feet: 5, inches: 8, pounds: 310 } });
+    expect(heavy.level).toBe('do_not_submit');
+    expect(heavy.graded).toBe('likely_graded');
+
+    // 5'8" / 330 lb = BMI 50.2 -> above 48.000, declined on both plans.
+    const overweight = await categoriesFor({ build_height_weight: { feet: 5, inches: 8, pounds: 330 } });
+    expect(overweight.level).toBe('do_not_submit');
+    expect(overweight.graded).toBe('do_not_submit');
+  });
 });
