@@ -292,28 +292,30 @@ tests/                    Unit (pure) and integration (database) tests
 
 ## Deployment
 
-The app is a standard Next.js server application plus a PostgreSQL database.
+Full instructions, including the three hosting options and what is **not** set
+up, are in **[DEPLOYMENT.md](./DEPLOYMENT.md)**. The short version:
 
-1. Provision PostgreSQL and set `DATABASE_URL`.
-2. Set `AUTH_SECRET` to a long random string (48+ bytes, base64url).
-3. Set `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD`, and **leave
-   `SEED_DEMO_CARRIER` unset or `false`** so no fictional data is loaded.
-4. Build and start:
+```bash
+cp .env.example .env          # set AUTH_SECRET, SEED_ADMIN_PASSWORD, POSTGRES_PASSWORD
+npm run docker:up             # app + Postgres
+npm run docker:migrate
+npm run docker:seed
+npm run docker:load-carriers
+```
 
-   ```bash
-   npm ci
-   npm run build
-   npm run db:migrate
-   npm run db:seed       # first deploy only: admin + placeholders + questions
-   npm start
-   ```
+Or deploy to Vercel with **Root Directory** set to `top-dawg-fe-smart-quote` —
+this app is a subdirectory, and the repository root holds a different project.
 
-Migrations are plain SQL under `drizzle/` and run with `npm run db:migrate`, so
-they fit any release pipeline. On Vercel, set the environment variables in the
-project settings and run `db:migrate` from CI or a one-off job — the build step
-itself never touches the database.
+Two things worth knowing before it is reachable from the internet:
 
-Change the seeded administrator password immediately after the first sign-in.
+- **The server refuses to start in production** if `AUTH_SECRET` is missing,
+  too short or still the example value, if `DATABASE_URL` points at localhost
+  or lacks TLS, or if `SEED_DEMO_CARRIER` is `true`. An unprotected admin area
+  is not a warning-level problem. `GET /api/health` reports the same findings
+  by variable name — never by value — and returns 503 while any of them stand.
+- **A fresh deployment quotes nothing.** Every carrier, rule and rate table
+  loads as draft / inactive and stays that way until a licensed reviewer
+  publishes it from `/admin/carriers/[id]/review`.
 
 ---
 

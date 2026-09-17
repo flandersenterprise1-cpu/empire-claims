@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Top Dawg FE Smart Quote — final-expense quoting and case-placement MVP",
+  "description": "Top Dawg FE Smart Quote \u2014 final-expense quoting and case-placement MVP",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -20,7 +20,15 @@
     "db:studio": "drizzle-kit studio",
     "db:seed": "tsx src/db/seed.ts",
     "db:reset": "tsx src/db/reset.ts",
-    "db:load-carriers": "tsx src/db/carriers/load.ts"
+    "db:load-carriers": "tsx src/db/carriers/load.ts",
+    "start:standalone": "node .next/standalone/server.js",
+    "docker:build": "docker build -t top-dawg-fe-smart-quote .",
+    "docker:up": "docker compose up --build -d",
+    "docker:migrate": "docker compose run --rm app npx tsx src/db/migrate.ts",
+    "docker:seed": "docker compose run --rm app npx tsx src/db/seed.ts",
+    "docker:load-carriers": "docker compose run --rm app npx tsx src/db/carriers/load.ts",
+    "docker:logs": "docker compose logs -f app",
+    "docker:down": "docker compose down"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
