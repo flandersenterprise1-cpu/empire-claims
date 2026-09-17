@@ -11,10 +11,17 @@
  *   monthly BSP = annual x 0.089     quarterly = annual x 0.275
  *   semiannual  = annual x 0.52      annual    = annual x 1.00
  *
- * Verified 2026-09-17 against three live quotes at $10,000 and $20,000: every
- * mode reproduced to the cent, and the per-$1,000 rate solved identically from
- * both face amounts. Deriving the rate this way is arithmetic on the carrier's
- * own published fee and its own quoted price -- not an estimate.
+ * Verified 2026-09-17 against live quoter output on both plans. Every mode
+ * reproduced to the cent, and each plan's per-$1,000 rate solved identically
+ * from two different face amounts, which pins the policy fee:
+ *
+ *   Level,  female 65 tobacco: $636.60 at $10,000            -> $60.06/$1,000
+ *   Level,  $20,000 quote reproduced the predicted $885.60    -> fee $36
+ *   Graded, female 65:         $561.00 at $10,000             -> $54.90/$1,000
+ *   Graded, $20,000 quote reproduced the predicted $1,110.00  -> fee $12
+ *
+ * Deriving the rate this way is arithmetic on the carrier's own published fee
+ * and its own quoted price -- not an estimate.
  *
  *   template  generate the blank capture sheet
  *   build     turn a filled capture sheet into an import-ready rate CSV
