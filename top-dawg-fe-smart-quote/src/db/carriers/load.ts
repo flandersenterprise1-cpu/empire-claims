@@ -29,6 +29,7 @@ import {
   type AnnualRateRow,
 } from './american-amicable-rates';
 import {
+  loadAflac,
   loadAigCorebridge,
   loadCicaLife,
   loadFidelityLife,
@@ -724,6 +725,7 @@ async function main() {
     await loadTransamerica(db, adminId);
     await loadTransamericaSolutionSeries(db, adminId);
     await loadFidelityLife(db, adminId);
+    await loadAflac(db, adminId);
     console.log('\nAll carrier data loaded as DRAFT / INACTIVE. Verify in the admin area before publishing.');
   } finally {
     await sql.end();

@@ -39,6 +39,12 @@ import {
 } from './fidelity-life';
 import { FEX_GRADED_RATES, FEX_SELECT_RATES, type FexRateRow } from './transamerica-fex-rates';
 import { STATE_CODES } from '../../lib/constants';
+import {
+  AFLAC_CARRIER,
+  AFLAC_EXCLUDED_STATES,
+  AFLAC_PRODUCTS,
+} from './aflac';
+import { AFLAC_DRUG_RULES } from './aflac-drugs';
 
 type Database = ReturnType<typeof createDb>['db'];
 
@@ -891,4 +897,163 @@ export async function loadTransamericaSolutionSeries(db: Database, adminId: numb
   console.log(
     `✓ Transamerica Solution series: ${SOLUTION_PRODUCTS.length} products, ${rateRowCount} verified rate rows (national + Montana unisex).`,
   );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Aflac Final Expense                                                         */
+/* -------------------------------------------------------------------------- */
+
+export async function loadAflac(db: Database, adminId: number | null) {
+  await resetCarrier(db, AFLAC_CARRIER.slug);
+
+  const [carrier] = await db
+    .insert(schema.carriers)
+    .values({
+      slug: AFLAC_CARRIER.slug,
+      name: AFLAC_CARRIER.name,
+      status: 'inactive',
+      isVerified: false,
+      isFictionalSample: false,
+      notes:
+        `Final Expense whole life, underwritten by ${AFLAC_CARRIER.underwriter}. Product structure, face bands, administration fee and state availability from the Final Expense & Medicare Supplement Sales Guide; medication rules from drug list ${AFLAC_CARRIER.drugListRef}. OUTSTANDING before activation: premium rates and modal factors (the sales guide refers to "the modal factors outlined" but does not print them), and the application itself — the Section A/B/C health questions that decide the rating class are not in any supplied document.`,
+    })
+    .returning();
+
+  const [guideDoc] = await db
+    .insert(schema.sourceDocuments)
+    .values({
+      carrierId: carrier.id,
+      title: AFLAC_CARRIER.salesGuide,
+      docType: 'product_guide',
+      effectiveDate: AFLAC_CARRIER.effectiveDate,
+      notes: 'Plan structure and eligibility p.20, face amounts p.20, state availability p.12.',
+      uploadedByUserId: adminId,
+    })
+    .returning();
+
+  const [drugDoc] = await db
+    .insert(schema.sourceDocuments)
+    .values({
+      carrierId: carrier.id,
+      title: AFLAC_CARRIER.drugList,
+      docType: 'medication_list',
+      reference: AFLAC_CARRIER.drugListRef,
+      effectiveDate: AFLAC_CARRIER.drugListEffective,
+      notes:
+        'Per-plan unacceptable-medication marks. Recovered positionally: the marks are vector graphics, not text.',
+      uploadedByUserId: adminId,
+    })
+    .returning();
+
+  const productIdByColumn = new Map<string, number>();
+  for (const [index, spec] of AFLAC_PRODUCTS.entries()) {
+    const widest = spec.faceBands.reduce(
+      (acc, b) => ({
+        min: Math.min(acc.min, b.minFaceAmount),
+        max: Math.max(acc.max, b.maxFaceAmount),
+      }),
+      { min: Infinity, max: 0 },
+    );
+    const [product] = await db
+      .insert(schema.products)
+      .values({
+        carrierId: carrier.id,
+        slug: spec.slug,
+        name: spec.name,
+        benefitType: spec.benefitType,
+        status: 'inactive',
+        minFaceAmount: widest.min,
+        maxFaceAmount: widest.max,
+        faceIncrement: 1000,
+        ageBasis: 'last_birthday',
+        minAge: spec.minAge,
+        maxAge: spec.maxAge,
+        // The sales guide describes no tobacco distinction for these plans.
+        tobaccoClasses: ['unismoke'],
+        sexClasses: ['male', 'female'],
+        waitingPeriodMonths: spec.waitingPeriodMonths,
+        simplicityScore: 5,
+        rateMethodology: 'per_thousand',
+        allowInterpolation: false,
+        notes: spec.notes,
+        sortOrder: index,
+      })
+      .returning();
+    productIdByColumn.set(spec.drugColumn, product.id);
+
+    for (const band of spec.faceBands) {
+      await db.insert(schema.productFaceLimits).values({
+        productId: product.id,
+        minAge: band.minAge,
+        maxAge: band.maxAge,
+        minFaceAmount: band.minFaceAmount,
+        maxFaceAmount: band.maxFaceAmount,
+        stateCode: null,
+        notes: 'Sales Guide p.20, issue-age band.',
+      });
+    }
+
+    await db.insert(schema.productStates).values(
+      STATE_CODES.map((code) => ({
+        productId: product.id,
+        stateCode: code,
+        isAvailable: !AFLAC_EXCLUDED_STATES.includes(code),
+        effectiveDate: AFLAC_CARRIER.effectiveDate,
+        notes: AFLAC_EXCLUDED_STATES.includes(code)
+          ? 'Sales Guide p.12: "Final Expense is available in all states except NY." Aflac Tier One is not licensed in New York.'
+          : null,
+      })),
+    );
+  }
+
+  const COLUMN_BY_LETTER: Record<string, string> = {
+    P: 'fe_preferred',
+    S: 'fe_standard',
+    M: 'fe_modified',
+  };
+
+  const medRows = [];
+  for (const [drug, condition, plans, page] of AFLAC_DRUG_RULES) {
+    const anyCondition = condition.trim().toLowerCase() === 'any condition';
+    for (const letter of plans) {
+      const productId = productIdByColumn.get(COLUMN_BY_LETTER[letter]);
+      if (productId === undefined) continue;
+      const planName = AFLAC_PRODUCTS.find(
+        (p) => p.drugColumn === COLUMN_BY_LETTER[letter],
+      )!.name;
+      medRows.push({
+        carrierId: carrier.id,
+        productId,
+        medicationName: drug.toLowerCase(),
+        impliesConditionCode: null,
+        // A named condition means "unacceptable when prescribed for this".
+        // The interview does not record what a medication was prescribed for,
+        // so those go to the underwriter rather than declining outright.
+        result: (anyCondition ? 'decline' : 'refer') as 'decline' | 'refer',
+        benefitClassification: null,
+        explanation: anyCondition
+          ? `${drug} is marked unacceptable for ${planName} on the Aflac drug list, for any condition.`
+          : `${drug} is marked unacceptable for ${planName} on the Aflac drug list when prescribed for: ${condition}. The health interview records which medications the client takes, not what each was prescribed for, so this needs underwriting verification rather than an automatic decline.`,
+        sourceDocumentId: drugDoc.id,
+        sourcePage: `p.${page}`,
+        effectiveDate: AFLAC_CARRIER.drugListEffective,
+        verificationStatus: 'draft' as const,
+        isFictionalSample: false,
+        createdByUserId: adminId,
+      });
+    }
+  }
+  for (let i = 0; i < medRows.length; i += 500) {
+    await db.insert(schema.medicationRules).values(medRows.slice(i, i + 500));
+  }
+
+  const declines = medRows.filter((r) => r.result === 'decline').length;
+  console.log(
+    `✓ Aflac: ${AFLAC_PRODUCTS.length} products, ${medRows.length} draft medication rules ` +
+      `(${declines} decline, ${medRows.length - declines} refer), ` +
+      `available in ${STATE_CODES.length - AFLAC_EXCLUDED_STATES.length} of ${STATE_CODES.length} jurisdictions. ` +
+      `No rates or modal factors published — premiums will read "Rate unavailable".`,
+  );
+  void guideDoc;
+  return carrier;
 }
