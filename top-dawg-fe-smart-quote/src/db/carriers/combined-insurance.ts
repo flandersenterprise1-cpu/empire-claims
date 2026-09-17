@@ -21,6 +21,19 @@ export const COMBINED_CARRIER = {
   effectiveDate: '2025-03-01',
 };
 
+/**
+ * Producer Guide p.6, "Product Availability": "Combined Generational Life is
+ * available in the District of Columbia and all states except California,
+ * Florida, New York, North Dakota, and South Dakota."
+ *
+ * Combined's New York business is written by a separate company (Combined Life
+ * Insurance Company of New York) on its own forms, so New York is excluded here
+ * rather than mapped onto these products.
+ */
+export const COMBINED_UNAVAILABLE_STATES = ['CA', 'FL', 'NY', 'ND', 'SD'];
+
+export const COMBINED_AVAILABILITY_SOURCE_PAGE = 'p.6';
+
 export interface CombinedProductSpec {
   slug: string;
   name: string;

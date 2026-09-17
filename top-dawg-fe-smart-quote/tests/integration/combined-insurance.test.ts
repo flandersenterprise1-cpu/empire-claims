@@ -13,6 +13,10 @@ import * as schema from '@/db/schema';
 import { loadCombinedInsurance } from '@/db/carriers/load';
 import { loadQuoteCatalog } from '@/modules/catalog/repository';
 import { findRate } from '@/modules/engine/rates';
+import { runSuperQuote } from '@/modules/engine';
+import { loadActiveQuestions } from '@/modules/catalog/repository';
+import { extractFacts } from '@/modules/questionnaire';
+import { HEALTHY_ANSWERS } from '../fixtures/healthy-answers';
 import { describeIfDb, setupTestDb } from './helpers';
 
 const ASOF = '2026-06-01';
@@ -28,6 +32,7 @@ const INTAKE = {
 describeIfDb('Combined Insurance Generational Life', () => {
   let db: Awaited<ReturnType<typeof setupTestDb>>['db'];
   let sql: ReturnType<typeof postgres>;
+  let questions: Awaited<ReturnType<typeof loadActiveQuestions>> = [];
 
   beforeAll(async () => {
     const created = await setupTestDb({ demoCarrier: false });
@@ -54,10 +59,8 @@ describeIfDb('Combined Insurance Generational Life', () => {
         .update(schema.rateTables)
         .set({ status: 'published' })
         .where(eq(schema.rateTables.productId, product.id));
-      await db
-        .insert(schema.productStates)
-        .values({ productId: product.id, stateCode: 'TX', isAvailable: true });
     }
+    questions = await loadActiveQuestions(db);
   }, 180_000);
 
   afterAll(async () => {
@@ -141,5 +144,45 @@ describeIfDb('Combined Insurance Generational Life', () => {
       .limit(1);
     expect(rule.result).toBe('graded');
     expect(rule.productId).toBeNull();
+  });
+  it('honours the Producer Guide p.6 footprint', async () => {
+    const facts = extractFacts(questions, HEALTHY_ANSWERS);
+    const run = async (stateCode: string) => {
+      const bundles = await loadQuoteCatalog(db, {
+        stateCode,
+        age: 55,
+        faceAmount: 10000,
+        asOf: ASOF,
+      });
+      return runSuperQuote({
+        intake: {
+          stateCode,
+          age: 55,
+          ageNearestBirthday: 55,
+          sex: 'male',
+          tobaccoUse: false,
+          faceAmount: 10000,
+          monthlyBudget: null,
+        },
+        asOf: ASOF,
+        facts,
+        bundles,
+      });
+    };
+
+    // The guide names five states where Generational Life is not available.
+    for (const state of ['CA', 'FL', 'NY', 'ND', 'SD']) {
+      const quote = await run(state);
+      const blocked = quote.unavailable.find((o) => o.productSlug === 'generational-life-preferred');
+      expect(blocked?.exclusions.map((e) => e.code)).toContain('state_unavailable');
+    }
+
+    // Everywhere else, including the District of Columbia, is open and priced.
+    for (const state of ['TX', 'DC', 'AL']) {
+      const quote = await run(state);
+      const option = quote.options.find((o) => o.productSlug === 'generational-life-preferred');
+      expect(option, state).toBeDefined();
+      expect(option!.monthlyPremium, state).toBeGreaterThan(0);
+    }
   });
 });

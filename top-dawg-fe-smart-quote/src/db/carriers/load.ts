@@ -35,7 +35,13 @@ import {
   loadTransamerica,
   loadTransamericaSolutionSeries,
 } from './load-more';
-import { COMBINED_CARRIER, COMBINED_PRODUCTS, COMBINED_RULES } from './combined-insurance';
+import {
+  COMBINED_AVAILABILITY_SOURCE_PAGE,
+  COMBINED_CARRIER,
+  COMBINED_PRODUCTS,
+  COMBINED_RULES,
+  COMBINED_UNAVAILABLE_STATES,
+} from './combined-insurance';
 import {
   GENERATIONAL_LIFE_MEDICATIONS,
   GENERATIONAL_LIFE_RATES,
@@ -510,6 +516,21 @@ export async function loadCombinedInsurance(db: Database, adminId: number | null
       .returning();
     productIdBySlug.set(spec.slug, product.id);
 
+    // Producer Guide p.6 lists the footprint as an exclusion, so every other
+    // state is available. Without these rows the engine refuses to quote
+    // Combined anywhere, which is the safe default but hides a priced carrier.
+    await db.insert(schema.productStates).values(
+      STATE_CODES.map((code) => ({
+        productId: product.id,
+        stateCode: code,
+        isAvailable: !COMBINED_UNAVAILABLE_STATES.includes(code),
+        effectiveDate: COMBINED_CARRIER.effectiveDate,
+        notes: COMBINED_UNAVAILABLE_STATES.includes(code)
+          ? `Named in the Producer Guide ${COMBINED_AVAILABILITY_SOURCE_PAGE} list of states where Generational Life is not available.`
+          : null,
+      })),
+    );
+
     // Rate table: annual rates per $1,000 with NO modal factor, so the engine
     // will correctly refuse to produce a monthly premium until one is supplied.
     const [rateTable] = await db
@@ -662,7 +683,8 @@ export async function loadCombinedInsurance(db: Database, adminId: number | null
 
   console.log(
     `\u2713 Combined Insurance: ${COMBINED_PRODUCTS.length} products, ${ruleCount} draft rules, ` +
-      `${medCount} draft medication rules, ${GENERATIONAL_LIFE_RATES.length * 4} rate rows per product. ` +
+      `${medCount} draft medication rules, ${GENERATIONAL_LIFE_RATES.length * 4} rate rows per product, ` +
+      `available in ${STATE_CODES.length - COMBINED_UNAVAILABLE_STATES.length} of ${STATE_CODES.length} jurisdictions. ` +
       `Modal factor 0.0833 confirmed against the carrier quoter \u2014 premiums are live once published.`,
   );
   return carrier;
