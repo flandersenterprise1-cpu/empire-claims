@@ -46,6 +46,8 @@ export default async function CarrierPage({ params }: { params: Promise<{ id: st
   const documentOptions = documents.map((doc) => ({ value: String(doc.id), label: doc.title }));
   const productOptions = carrierProducts.map((p) => ({ value: String(p.id), label: p.name }));
 
+  const draftRuleCount = rules.filter((r) => r.verificationStatus === 'draft').length;
+
   return (
     <div className="stack-lg">
       <div>
@@ -287,7 +289,17 @@ export default async function CarrierPage({ params }: { params: Promise<{ id: st
 
       {/* -------------------------- Underwriting rules -------------------- */}
       <section className="stack">
-        <h2 style={{ fontSize: '1.1rem' }}>Underwriting rules ({rules.length})</h2>
+        <div
+          style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap', alignItems: 'baseline' }}
+        >
+          <h2 style={{ fontSize: '1.1rem' }}>Underwriting rules ({rules.length})</h2>
+          {rules.length > 0 ? (
+            <Link href={`/admin/carriers/${carrierId}/review`} className="btn btn-sm">
+              Review and publish in bulk
+              {draftRuleCount > 0 ? ` (${draftRuleCount} draft)` : ''}
+            </Link>
+          ) : null}
+        </div>
         {rules.length > 0 ? (
           <div className="card" style={{ padding: 0 }}>
             <div className="table-wrap">

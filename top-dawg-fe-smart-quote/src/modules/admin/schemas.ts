@@ -208,4 +208,14 @@ export const previewSchema = z.object({
 
 export const activationSchema = z.object({ status: z.enum(['active', 'inactive']) });
 export const ruleStatusSchema = z.object({ status: ruleLifecycle });
+export const bulkRuleStatusSchema = z.object({
+  ruleIds: z.array(z.coerce.number().int().positive()).min(1).max(500),
+  status: ruleLifecycle,
+  /**
+   * The status the reviewer believed these rules were in. A rule that has moved
+   * since the page rendered is skipped rather than silently re-verified.
+   */
+  expectedFrom: ruleLifecycle,
+});
+
 export const rollbackSchema = z.object({ version: z.coerce.number().int().positive() });

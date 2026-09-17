@@ -8,7 +8,7 @@
  *    back to `draft` until an administrator verifies it again.
  *  - Every version is retained, so any earlier version can be rolled back to.
  */
-import { and, desc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq } from 'drizzle-orm';
 import * as schema from '@/db/schema';
 import { recordAudit, type AuditActor } from '@/modules/audit';
 import type { Db } from '@/modules/catalog/repository';
@@ -228,4 +228,89 @@ export async function expireStaleRules(db: Db, asOf: string, actor: AuditActor |
     await setRuleStatus(db, rule.id, 'expired', actor);
   }
   return stale.length;
+}
+
+/**
+ * Rules awaiting review for one carrier, each joined to the document and page
+ * it was drawn from. The reviewer needs the citation beside the rule -- a rule
+ * they cannot trace to a source is a rule they should not be verifying.
+ */
+export async function listRulesForReview(
+  db: Db,
+  carrierId: number,
+  status: 'draft' | 'verified' | 'expired' | 'archived' = 'draft',
+) {
+  const rows = await db
+    .select({
+      rule: schema.underwritingRules,
+      productName: schema.products.name,
+      sourceTitle: schema.sourceDocuments.title,
+    })
+    .from(schema.underwritingRules)
+    .leftJoin(schema.products, eq(schema.underwritingRules.productId, schema.products.id))
+    .leftJoin(
+      schema.sourceDocuments,
+      eq(schema.underwritingRules.sourceDocumentId, schema.sourceDocuments.id),
+    )
+    .where(
+      and(
+        eq(schema.underwritingRules.carrierId, carrierId),
+        eq(schema.underwritingRules.verificationStatus, status),
+      ),
+    )
+    .orderBy(
+      asc(schema.underwritingRules.ruleCategory),
+      asc(schema.underwritingRules.conditionCode),
+      desc(schema.underwritingRules.priority),
+    );
+  return rows.map((r) => ({
+    ...r.rule,
+    productName: r.productName,
+    sourceTitle: r.sourceTitle,
+  }));
+}
+
+export interface BulkStatusResult {
+  updated: number[];
+  skipped: Array<{ id: number; reason: string }>;
+}
+
+/**
+ * Moves several rules to one status in a single reviewer action.
+ *
+ * Each rule still goes through setRuleStatus, so every one is snapshotted and
+ * audited individually -- a bulk action leaves the same trail as doing them one
+ * at a time. Rules that are not currently in `expectedFrom` are skipped and
+ * reported rather than moved, so a stale page cannot silently verify a rule the
+ * reviewer never actually saw.
+ */
+export async function setRuleStatusBulk(
+  db: Db,
+  ruleIds: number[],
+  status: 'draft' | 'verified' | 'expired' | 'archived',
+  expectedFrom: string,
+  actor: AuditActor | null,
+): Promise<BulkStatusResult> {
+  const result: BulkStatusResult = { updated: [], skipped: [] };
+  for (const id of ruleIds) {
+    const [current] = await db
+      .select()
+      .from(schema.underwritingRules)
+      .where(eq(schema.underwritingRules.id, id))
+      .limit(1);
+    if (!current) {
+      result.skipped.push({ id, reason: 'no longer exists' });
+      continue;
+    }
+    if (current.verificationStatus !== expectedFrom) {
+      result.skipped.push({
+        id,
+        reason: `is now "${current.verificationStatus}", not "${expectedFrom}"`,
+      });
+      continue;
+    }
+    await setRuleStatus(db, id, status, actor);
+    result.updated.push(id);
+  }
+  return result;
 }
