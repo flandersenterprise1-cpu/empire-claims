@@ -20,6 +20,16 @@
  */
 import type { BenefitType, RuleResult } from '@/modules/engine/types';
 
+/**
+ * State approval, from form 3523 "Dignity Solution State Approval Listing".
+ * Every other state is approved for all three plans (IDB / GDB / ROP).
+ *
+ * Iowa appears on the listing as a row but carries no approval marks, so it is
+ * treated as not approved — the conservative reading. Maine, Montana, New
+ * Hampshire and New York do not appear on the listing at all.
+ */
+export const AMAM_UNAPPROVED_STATES = ['IA', 'ME', 'MT', 'NH', 'NY'];
+
 export const AMAM_CARRIER = {
   slug: 'american-amicable',
   name: 'American Amicable',
@@ -27,6 +37,19 @@ export const AMAM_CARRIER = {
   sourceDocRef: 'Form 3079(9/23) CN14-001',
   /** Printed on the guide as 9/23. */
   effectiveDate: '2023-09-01',
+
+  /**
+   * The same policy sold under the Asurea brand. Form 3049(10/25) "Dignity
+   * Solutions Agent Guide" covers the identical policy forms — 9767 Immediate,
+   * 9644 Graded, 9645 Return of Premium — and the identical application, form
+   * 9466. All 432 rate values in the two guides were compared programmatically
+   * and are identical, as are the $30 annual policy fee and the modal factors.
+   * So the rates and rules loaded here serve both brand names.
+   */
+  dignityGuideTitle: 'Dignity Solutions Agent Guide — Underwriting Guidelines & Premium Rates',
+  dignityGuideRef: 'Form 3049(10/25) CN13-029',
+  stateListingTitle: 'Dignity Solution State Approval Listing',
+  stateListingRef: 'Form 3523',
 };
 
 export interface AmamProductSpec {

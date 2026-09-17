@@ -14,8 +14,14 @@
 import 'dotenv/config';
 import { eq } from 'drizzle-orm';
 import { createDb } from '../client';
+import { STATE_CODES } from '../../lib/constants';
 import * as schema from '../schema';
-import { AMAM_CARRIER, AMAM_PRODUCTS, AMAM_RULES } from './american-amicable';
+import {
+  AMAM_CARRIER,
+  AMAM_PRODUCTS,
+  AMAM_RULES,
+  AMAM_UNAPPROVED_STATES,
+} from './american-amicable';
 import {
   SC_GRADED_RATES,
   SC_IMMEDIATE_RATES,
@@ -73,7 +79,7 @@ export async function loadAmericanAmicable(db: Database, adminId: number | null)
       isVerified: false,
       isFictionalSample: false,
       notes:
-        'Loaded from the Senior Choice Agent Guide, form 3079(9/23). Products, limits, underwriting rules and rates are in place as DRAFT. Outstanding before activation: state availability (the guide does not publish a state approval grid) and verification of each rule against the cited page.',
+        'Loaded from the Senior Choice Agent Guide (3079(9/23)) with state availability from the Dignity Solution State Approval Listing (3523). The same policy is sold under the Asurea brand as Dignity Solutions — guide 3049(10/25) carries the identical policy forms, application and all 432 rate values, verified programmatically. Approved in 46 states; not approved in Iowa, Maine, Montana, New Hampshire or New York. Outstanding before activation: verification of each underwriting rule against its cited page.',
     })
     .returning();
 
@@ -89,6 +95,27 @@ export async function loadAmericanAmicable(db: Database, adminId: number | null)
       uploadedByUserId: adminId,
     })
     .returning();
+
+  await db.insert(schema.sourceDocuments).values([
+    {
+      carrierId: carrier.id,
+      title: AMAM_CARRIER.dignityGuideTitle,
+      docType: 'underwriting_guide',
+      reference: AMAM_CARRIER.dignityGuideRef,
+      notes:
+        'The Asurea-branded edition of the same policy. Identical policy forms, application and rates; every rate value was compared against the Senior Choice guide and matched.',
+      uploadedByUserId: adminId,
+    },
+    {
+      carrierId: carrier.id,
+      title: AMAM_CARRIER.stateListingTitle,
+      docType: 'state_availability',
+      reference: AMAM_CARRIER.stateListingRef,
+      notes:
+        'Approved for Immediate, Graded and Return of Premium in 46 states. Iowa is listed without approval marks; Maine, Montana, New Hampshire and New York do not appear.',
+      uploadedByUserId: adminId,
+    },
+  ]);
 
   const productIdBySlug = new Map<string, number>();
 
@@ -117,6 +144,19 @@ export async function loadAmericanAmicable(db: Database, adminId: number | null)
       })
       .returning();
     productIdBySlug.set(spec.slug, product.id);
+
+    await db.insert(schema.productStates).values(
+      STATE_CODES.map((code) => ({
+        productId: product.id,
+        stateCode: code,
+        isAvailable: !AMAM_UNAPPROVED_STATES.includes(code),
+        notes: AMAM_UNAPPROVED_STATES.includes(code)
+          ? code === 'IA'
+            ? 'Listed on the State Approval Listing (3523) without approval marks.'
+            : 'Does not appear on the State Approval Listing (3523).'
+          : null,
+      })),
+    );
 
     for (const limit of spec.faceLimits ?? []) {
       await db.insert(schema.productFaceLimits).values({
@@ -226,7 +266,8 @@ export async function loadAmericanAmicable(db: Database, adminId: number | null)
 
   console.log(
     `✓ American Amicable: ${AMAM_PRODUCTS.length} products, ${ruleCount} draft rules, ` +
-      `${SC_IMMEDIATE_RATES.length + SC_GRADED_RATES.length + SC_ROP_RATES.length} rate rows (draft).`,
+      `${SC_IMMEDIATE_RATES.length + SC_GRADED_RATES.length + SC_ROP_RATES.length} rate rows (draft), ` +
+      `approved in ${STATE_CODES.length - AMAM_UNAPPROVED_STATES.length} of ${STATE_CODES.length} states.`,
   );
   return carrier;
 }

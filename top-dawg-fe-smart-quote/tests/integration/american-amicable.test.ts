@@ -11,6 +11,7 @@ import { eq } from 'drizzle-orm';
 import type postgres from 'postgres';
 import * as schema from '@/db/schema';
 import { loadAmericanAmicable } from '@/db/carriers/load';
+import { AMAM_UNAPPROVED_STATES } from '@/db/carriers/american-amicable';
 import { loadActiveQuestions, loadQuoteCatalog } from '@/modules/catalog/repository';
 import { extractFacts, type AnswerMap } from '@/modules/questionnaire';
 import { findRate } from '@/modules/engine/rates';
@@ -21,7 +22,6 @@ import { describeIfDb, setupTestDb } from './helpers';
 import { HEALTHY_ANSWERS } from '../fixtures/healthy-answers';
 
 const ASOF = '2026-06-01';
-const STATES = ['TX'];
 
 let questions: Awaited<ReturnType<typeof loadActiveQuestions>> = [];
 
@@ -70,11 +70,6 @@ describeIfDb('American Amicable Senior Choice (real carrier data)', () => {
         .update(schema.rateTables)
         .set({ status: 'published' })
         .where(eq(schema.rateTables.productId, product.id));
-      for (const state of STATES) {
-        await db
-          .insert(schema.productStates)
-          .values({ productId: product.id, stateCode: state, isAvailable: true });
-      }
     }
   }, 180_000);
 
@@ -263,17 +258,8 @@ describeIfDb('American Amicable Senior Choice (real carrier data)', () => {
   });
 
   it('enforces the $5,000 Washington minimum', async () => {
-    const [product] = await db
-      .select()
-      .from(schema.products)
-      .where(eq(schema.products.slug, 'senior-choice-immediate'))
-      .limit(1);
-    await db.insert(schema.productStates).values({
-      productId: product.id,
-      stateCode: 'WA',
-      isAvailable: true,
-    });
-
+    // Washington is approved on the state listing; the $5,000 minimum comes from
+    // the age-banded face limits, not from state availability.
     const bundles = await loadQuoteCatalog(db, { stateCode: 'WA', age: 65, faceAmount: 3000, asOf: ASOF });
     const quote = runSuperQuote({
       intake: { stateCode: 'WA', age: 65, sex: 'male', tobaccoUse: false, faceAmount: 3000, monthlyBudget: null },
@@ -283,5 +269,54 @@ describeIfDb('American Amicable Senior Choice (real carrier data)', () => {
     });
     const immediate = quote.unavailable.find((o) => o.productSlug === 'senior-choice-immediate');
     expect(immediate?.exclusions.map((e) => e.code)).toContain('face_below_minimum');
+  });
+
+  /* ------------------ State approval listing (form 3523) ------------------ */
+
+  it('is approved in 46 of 51 states', async () => {
+    const [carrier] = await db
+      .select()
+      .from(schema.carriers)
+      .where(eq(schema.carriers.slug, 'american-amicable'))
+      .limit(1);
+    const products = await db
+      .select()
+      .from(schema.products)
+      .where(eq(schema.products.carrierId, carrier.id));
+    for (const product of products) {
+      const states = await db
+        .select()
+        .from(schema.productStates)
+        .where(eq(schema.productStates.productId, product.id));
+      expect(states.filter((s) => s.isAvailable)).toHaveLength(46);
+      expect(states.filter((s) => !s.isAvailable).map((s) => s.stateCode).sort()).toEqual(
+        [...AMAM_UNAPPROVED_STATES].sort(),
+      );
+    }
+  });
+
+  it.each(AMAM_UNAPPROVED_STATES)('offers nothing in %s', async (state) => {
+    const bundles = await loadQuoteCatalog(db, { stateCode: state, age: 65, faceAmount: 10000, asOf: ASOF });
+    const quote = runSuperQuote({
+      intake: { stateCode: state, age: 65, sex: 'female', tobaccoUse: false, faceAmount: 10000, monthlyBudget: null },
+      facts: factsFrom(HEALTHY_ANSWERS),
+      asOf: ASOF,
+      bundles,
+    });
+    expect(quote.options).toHaveLength(0);
+    expect(quote.unavailable.every((o) => o.exclusions.some((e) => e.code === 'state_unavailable'))).toBe(true);
+  });
+
+  it('quotes in an approved state', async () => {
+    const bundles = await loadQuoteCatalog(db, { stateCode: 'FL', age: 65, faceAmount: 10000, asOf: ASOF });
+    const quote = runSuperQuote({
+      intake: { stateCode: 'FL', age: 65, sex: 'female', tobaccoUse: false, faceAmount: 10000, monthlyBudget: null },
+      facts: factsFrom(HEALTHY_ANSWERS),
+      asOf: ASOF,
+      bundles,
+    });
+    expect(quote.best?.productSlug).toBe('senior-choice-immediate');
+    // (50.47 x 10 + 30) x .088 — the guide's own worked example rate at age 65.
+    expect(quote.best?.monthlyPremium).toBe(Math.round((50.47 * 10 + 30) * 0.088 * 100) / 100);
   });
 });
