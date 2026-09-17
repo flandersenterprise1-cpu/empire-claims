@@ -27,11 +27,17 @@
  * than a female on Preferred but 34.7% more on Standard; the tobacco load is
  * 15.8% on Preferred, 26.8% on Standard and 19.4% on Modified.
  *
+ * Known figures, age 65, TX, $10,000 annual, as rate per $1,000:
+ *
+ *              non-tobacco   tobacco
+ *   female       45.47 / 60.73 / 80.90     68.29 / 103.71 / 126.57
+ *   male         58.98 / 81.82 / 106.04    not yet captured
+ *
  * A warning for whoever runs the capture: this quoter keeps showing the PREVIOUS
  * premiums after the applicant details change, until "Update Products" is
- * clicked. Two quotes taken this way looked identical for male and female and
+ * clicked. Two quotes taken that way looked identical for male and female and
  * nearly sent a unisex table into the engine. Re-read the plan prices after
- * every change, and if a number does not move when it should have, it did not
+ * every change, and if a number has not moved when it should have, it did not
  * requote.
  *
  * Capture is in ANNUAL mode. The monthly figure is then derived rather than
