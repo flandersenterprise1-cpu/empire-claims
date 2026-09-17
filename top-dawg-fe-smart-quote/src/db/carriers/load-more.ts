@@ -7,7 +7,14 @@
 import { eq } from 'drizzle-orm';
 import type { createDb } from '../client';
 import * as schema from '../schema';
-import { AIG_CARRIER, AIG_PRODUCTS, AIG_RULES, aigExplanation } from './aig-corebridge';
+import {
+  AIG_CARRIER,
+  AIG_EXCLUDED_STATES,
+  AIG_FOOTPRINT_CAVEAT,
+  AIG_PRODUCTS,
+  AIG_RULES,
+  aigExplanation,
+} from './aig-corebridge';
 import { CICA_CARRIER, CICA_PRODUCTS, CICA_RULES, cicaExplanation } from './cica-life';
 import {
   CICA_APPROVED_STATES,
@@ -310,6 +317,21 @@ export async function loadAigCorebridge(db: Database, adminId: number | null) {
       })
       .returning();
     if (spec.underwritten) underwrittenProductIds.push(product.id);
+
+    const excluded = AIG_EXCLUDED_STATES[spec.slug] ?? [];
+    await db.insert(schema.productStates).values(
+      STATE_CODES.map((code) => ({
+        productId: product.id,
+        stateCode: code,
+        isAvailable: !excluded.includes(code),
+        effectiveDate: AIG_CARRIER.effectiveDate,
+        notes: excluded.includes(code)
+          ? code === 'ME'
+            ? 'GIWL guide p.162: "Product not approved for sale in NY & ME."'
+            : 'Both guides: "AGL does not solicit, issue or deliver policies or contracts in the state of New York."'
+          : AIG_FOOTPRINT_CAVEAT,
+      })),
+    );
   }
 
   // The SimpliNow underwriting table decides between the two underwritten

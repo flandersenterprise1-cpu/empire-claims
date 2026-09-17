@@ -380,6 +380,25 @@ export async function loadMutualOfOmaha(db: Database, adminId: number | null) {
       })
       .returning();
     productIdBySlug.set(spec.slug, product.id);
+
+    // The Living Promise quoter page carries the carrier's own statement:
+    // "United of Omaha is licensed in all states except NY." The very same
+    // sentence warns that "Product base plans, provisions, features and riders
+    // may not be available in all states and may vary by state", so this is a
+    // company licence, not a Living Promise approval grid. It loads as draft
+    // with that recorded, and the product-level grid must replace it before
+    // publishing.
+    await db.insert(schema.productStates).values(
+      STATE_CODES.map((code) => ({
+        productId: product.id,
+        stateCode: code,
+        isAvailable: code !== 'NY',
+        notes:
+          code === 'NY'
+            ? 'mutualofomaha.com quoter footer: "United of Omaha is licensed in all states except NY."'
+            : 'Derived from the company licence on the Living Promise quoter page, not from a Living Promise state approval grid. Confirm per product before publishing.',
+      })),
+    );
   }
 
   // Medication rules. Declines are carrier-wide; "may qualify for Graded" is a

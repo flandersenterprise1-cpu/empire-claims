@@ -22,6 +22,30 @@ export const AIG_CARRIER = {
   effectiveDate: '2024-04-01',
 };
 
+/**
+ * States excluded by the carrier's own documents.
+ *
+ * Both guides carry the American General boilerplate: "AGL does not solicit,
+ * issue or deliver policies or contracts in the state of New York." The GIWL
+ * guide adds, at p.162, "Product not approved for sale in NY & ME."
+ *
+ * What the documents do NOT say is that every remaining state is approved --
+ * they say only "products may not be available in all states." Corebridge
+ * publishes a state approval grid that is not among the supplied documents and
+ * that this environment cannot reach, so the footprints below treat every
+ * other state as available and record that this came from company licensing
+ * rather than a product approval grid. They load as draft like everything
+ * else and must be checked against that grid before a product is published.
+ */
+export const AIG_EXCLUDED_STATES: Record<string, string[]> = {
+  'simplinow-legacy-max': ['NY'],
+  'simplinow-legacy': ['NY'],
+  giwl: ['NY', 'ME'],
+};
+
+export const AIG_FOOTPRINT_CAVEAT =
+  'Derived from company licensing, not from a Corebridge state approval grid: the guides state only that AGL does not write New York (and, for GIWL, Maine). Confirm against the current approval grid before publishing.';
+
 export interface AigProductSpec {
   slug: string;
   name: string;
