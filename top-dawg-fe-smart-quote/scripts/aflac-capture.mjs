@@ -40,8 +40,12 @@
  * every change, and if a number has not moved when it should have, it did not
  * requote.
  *
- * Capture is in ANNUAL mode. The monthly figure is then derived rather than
- * typed, so no rounding rule has to be trusted at capture time.
+ * Capture is in ANNUAL mode at $10,000, one figure per plan. The fee and the
+ * linearity are already proven, so a single face amount determines the cell:
+ * rate = (annual - 48) / 10. The $20,000 columns are optional; fill one in
+ * occasionally and the build step cross-checks it, but nothing needs them.
+ * The monthly figure is derived rather than typed, so no rounding rule has to
+ * be trusted at capture time.
  *
  *   template  generate the blank capture sheet
  *   build     turn a filled sheet into an import-ready rate CSV
@@ -79,8 +83,9 @@ function template(outPath) {
   const body = rows.map((r) => [r.sex, r.tobacco, r.age, ...COLUMNS.map(() => '')].join(','));
   writeFileSync(outPath, [header, ...body].join('\n') + '\n');
   console.log(`Wrote ${rows.length} rows to ${outPath}`);
-  console.log('Set the quoter to ANNUAL mode. One screen fills one row: read the');
-  console.log(`three plan prices at $${LOW_FACE.toLocaleString()} and again at $${HIGH_FACE.toLocaleString()}.`);
+  console.log(`Set the quoter to ANNUAL mode and the benefit to $${LOW_FACE.toLocaleString()}.`);
+  console.log('One screen fills one row: read the three plan prices into the _10k columns.');
+  console.log(`The _20k columns are an optional cross-check -- leave them blank.`);
   console.log('Modified stops at issue age 75; leave its columns blank above that.');
 }
 
@@ -112,25 +117,29 @@ function build(inPath, outPath) {
         problems.push(`line ${lineNo}: ${plan.label} is not issued at age ${age} (${plan.minAge}-${plan.maxAge})`);
         continue;
       }
-      if (low === null || high === null) {
-        problems.push(`line ${lineNo}: ${plan.label} has only one of the two face amounts`);
+      if (low === null) {
+        problems.push(`line ${lineNo}: ${plan.label} has a $${HIGH_FACE.toLocaleString()} premium but no $${LOW_FACE.toLocaleString()} one`);
         continue;
       }
-      if (!Number.isFinite(low) || !Number.isFinite(high) || low <= ANNUAL_FEE) {
-        problems.push(`line ${lineNo}: ${plan.label} premiums are not usable`);
+      if (!Number.isFinite(low) || low <= ANNUAL_FEE) {
+        problems.push(`line ${lineNo}: ${plan.label} premium "${get(`${plan.key}_10k`)}" is not usable`);
         continue;
       }
 
       const lowRate = Math.round(((low - ANNUAL_FEE) / (LOW_FACE / 1000)) * 100) / 100;
-      const highRate = Math.round(((high - ANNUAL_FEE) / (HIGH_FACE / 1000)) * 100) / 100;
-      // Both face amounts must agree. If they do not, either a premium was
-      // mistyped or this plan has a rate band, and neither may be averaged away.
-      if (Math.abs(lowRate - highRate) > 0.01) {
-        problems.push(
-          `line ${lineNo}: ${plan.label} is not linear -- $${LOW_FACE.toLocaleString()} implies ` +
-          `$${lowRate}/$1,000 but $${HIGH_FACE.toLocaleString()} implies $${highRate}. Re-read both; ` +
-          `if they are right, this plan has a rate band and needs modelling.`);
-        continue;
+
+      // The $20,000 column is optional. When it is filled in it must agree,
+      // because a disagreement means either a mistyped premium or a rate band,
+      // and neither may be averaged away.
+      if (high !== null) {
+        const highRate = Math.round(((high - ANNUAL_FEE) / (HIGH_FACE / 1000)) * 100) / 100;
+        if (Math.abs(lowRate - highRate) > 0.01) {
+          problems.push(
+            `line ${lineNo}: ${plan.label} is not linear -- $${LOW_FACE.toLocaleString()} implies ` +
+            `$${lowRate}/$1,000 but $${HIGH_FACE.toLocaleString()} implies $${highRate}. Re-read both; ` +
+            `if they are right, this plan has a rate band and needs modelling.`);
+          continue;
+        }
       }
 
       if (!bySlug.has(plan.slug)) bySlug.set(plan.slug, []);
