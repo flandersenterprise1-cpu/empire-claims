@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
-export function LoginForm() {
+export function LoginForm({ redirectTo = '/admin' }: { redirectTo?: string } = {}) {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -25,7 +25,7 @@ export function LoginForm() {
           });
           const payload = await response.json().catch(() => ({}));
           if (!response.ok) throw new Error(payload.error ?? 'Sign in failed.');
-          router.replace('/admin');
+          router.replace(redirectTo);
           router.refresh();
         } catch (err) {
           setError((err as Error).message);

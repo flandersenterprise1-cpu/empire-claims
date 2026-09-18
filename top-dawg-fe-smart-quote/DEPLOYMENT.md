@@ -38,12 +38,16 @@ cp .env.example .env
 # edit .env: AUTH_SECRET, SEED_ADMIN_PASSWORD, POSTGRES_PASSWORD
 
 npm run docker:up              # builds the image and starts app + Postgres
-npm run docker:migrate         # creates the schema
-npm run docker:seed            # bootstrap admin + health interview
-npm run docker:load-carriers   # loads every carrier as DRAFT / INACTIVE
+npm run docker:setup           # schema, admin, carriers, and goes live
 
 curl localhost:3000/api/health
 ```
+
+`setup` leaves a working quoter: it migrates, seeds, loads every carrier, and
+activates the three whose rates reproduce the carrier's own published figures
+(Transamerica, American Amicable, Combined). Carriers whose rates are not
+verified yet are loaded but not quoted, and it prints which. Re-running it is
+safe.
 
 The database is deliberately **not** published to the host — only the app
 container can reach it. Add a `ports` mapping to `docker-compose.yml` if you
@@ -67,9 +71,7 @@ Next.js is Vercel's own framework, so this is the shortest path to a URL.
    machine:
 
    ```bash
-   DATABASE_URL="<the production url>" npm run db:migrate
-   DATABASE_URL="<the production url>" npm run db:seed
-   DATABASE_URL="<the production url>" npm run db:load-carriers
+   DATABASE_URL="<the production url>" npm run setup
    ```
 
 `vercel.json` pins the framework and install command; it does not pin the root
@@ -91,15 +93,14 @@ runtime needs no `node_modules`. Copy `.next/static` and `public` next to
 
 ## After the first deploy
 
-Everything loads as **draft / inactive**, so a fresh deployment quotes
-nothing. That is deliberate.
+`npm run setup` leaves the site quoting from three carriers. Then:
 
 1. Sign in at `/admin` with `SEED_ADMIN_EMAIL` and `SEED_ADMIN_PASSWORD`, and
-   change the password.
-2. Review each carrier's rules at `/admin/carriers/[id]/review`, reading them
-   against the source page each one cites.
-3. Publish the rate tables for the carriers whose rates are verified.
-4. Quote at `/quote`.
+   **change the password**.
+2. Send `/quote` to your agents.
+3. As more carriers' rates arrive, import them and activate the carrier from
+   `/admin`. Rules can be reviewed in bulk at
+   `/admin/carriers/[id]/review`, each shown against the source page it cites.
 
 ## Upgrades
 
@@ -113,10 +114,12 @@ hand.
 
 ## What is NOT set up
 
-- **`/quote` is unauthenticated.** Anyone with the URL can run a quote. No
-  client-identifying data is collected or stored, so this leaks no personal
-  information, but it does expose your carrier lineup and pricing to anyone
-  who finds the link. Gate it behind agent login before advertising the URL.
+- **`/quote` is open to anyone with the link.** That is the current intent:
+  share the URL and agents can quote immediately, no accounts to manage. No
+  client-identifying data is collected or stored, so nothing personal is
+  exposed -- but your carrier lineup and pricing are visible to whoever has
+  the link. The role column and session handling already exist, so gating it
+  behind agent sign-in later is a small change.
 - **No backups.** Configure them on whichever database you choose.
 - **No custom domain or TLS termination** beyond what the host provides.
 - **No error reporting service.**

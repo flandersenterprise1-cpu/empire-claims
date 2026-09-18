@@ -28,7 +28,9 @@
     "docker:seed": "docker compose run --rm app npx tsx src/db/seed.ts",
     "docker:load-carriers": "docker compose run --rm app npx tsx src/db/carriers/load.ts",
     "docker:logs": "docker compose logs -f app",
-    "docker:down": "docker compose down"
+    "docker:down": "docker compose down",
+    "setup": "tsx scripts/setup.mts",
+    "docker:setup": "docker compose run --rm app npx tsx scripts/setup.mts"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
