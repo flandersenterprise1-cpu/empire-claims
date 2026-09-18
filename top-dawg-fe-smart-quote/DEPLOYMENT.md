@@ -77,6 +77,13 @@ Next.js is Vercel's own framework, so this is the shortest path to a URL.
 `vercel.json` pins the framework and install command; it does not pin the root
 directory, which is a project setting.
 
+**Changing project settings does not change an existing deployment.** Vercel's
+"Redeploy" rebuilds an existing deployment from the configuration it was
+created with, so after editing Framework Preset or Root Directory a redeploy
+still builds the old thing -- visible as a Vite build finishing in seconds
+where a Next.js build should take minutes. Push a commit instead; a fresh
+deployment is the only one that reads the current settings.
+
 ## Option C — any Node host
 
 ```bash
