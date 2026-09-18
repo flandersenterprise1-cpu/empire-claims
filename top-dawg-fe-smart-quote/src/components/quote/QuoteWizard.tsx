@@ -17,11 +17,30 @@ async function postJson(url: string, body: unknown, method: 'POST' | 'PUT' = 'PO
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const error = new Error(payload.error ?? 'Something went wrong.') as Error & {
+    // A non-JSON body means the server failed before any handler ran, so there
+    // is no message to show. Name the status and point at the health page
+    // rather than leaving the agent with an unexplained failure.
+    const fallback =
+      `The server could not complete this step (HTTP ${response.status}). ` +
+      'Open /api/health to see what is misconfigured.';
+    const error = new Error(payload.error ?? fallback) as Error & {
       issues?: Array<{ path: string; message: string }>;
     };
     error.issues = payload.issues;
     throw error;
+  }
+  return payload;
+}
+
+async function getJson(url: string) {
+  const response = await fetch(url);
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(
+      payload.error ??
+        `The server could not load this step (HTTP ${response.status}). ` +
+          'Open /api/health to see what is misconfigured.',
+    );
   }
   return payload;
 }
@@ -54,8 +73,7 @@ export function QuoteWizard() {
       const created = await postJson('/api/quote/start', payload);
       setSessionId(created.quoteSessionId);
 
-      const response = await fetch(`/api/quote/${created.quoteSessionId}/questions`);
-      const data = await response.json();
+      const data = await getJson(`/api/quote/${created.quoteSessionId}/questions`);
       setQuestions(data.questions ?? []);
       setAnswers(data.answers ?? {});
       setStep(2);
