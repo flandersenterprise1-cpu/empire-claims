@@ -12,7 +12,9 @@
  * exactly as it would be from the admin screen. Carriers whose rates have not
  * been verified stay inactive and are not quoted; they are listed at the end.
  *
- * Safe to run again: it is idempotent.
+ * Safe to run again: it is idempotent. It also runs as part of `vercel-build`,
+ * so deploying is the only step an operator has to take -- there is no
+ * separate migrate-and-seed chore, and no terminal.
  */
 import 'dotenv/config';
 import { execFileSync } from 'node:child_process';

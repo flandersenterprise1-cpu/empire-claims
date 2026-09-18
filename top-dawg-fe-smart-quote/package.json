@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Top Dawg FE Smart Quote — final-expense quoting and case-placement MVP",
+  "description": "Top Dawg FE Smart Quote \u2014 final-expense quoting and case-placement MVP",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -30,7 +30,8 @@
     "docker:logs": "docker compose logs -f app",
     "docker:down": "docker compose down",
     "setup": "tsx scripts/setup.mts",
-    "docker:setup": "docker compose run --rm app npx tsx scripts/setup.mts"
+    "docker:setup": "docker compose run --rm app npx tsx scripts/setup.mts",
+    "vercel-build": "next build && tsx scripts/setup.mts"
   },
   "dependencies": {
     "@neon/config": "^1.7.2",
