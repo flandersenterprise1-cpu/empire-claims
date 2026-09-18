@@ -1,0 +1,245 @@
+/**
+ * Combined Insurance — Generational Life.
+ *
+ * This carrier is deliberately NOT quotable yet: the Producer Guide publishes
+ * annual rates per $1,000 but no annual-to-monthly modal factor, and it rates on
+ * age nearest birthday, which the intake does not yet capture. These tests pin
+ * the two safety behaviours that follow from that.
+ */
+import { afterAll, beforeAll, expect, it } from 'vitest';
+import { eq } from 'drizzle-orm';
+import type postgres from 'postgres';
+import * as schema from '@/db/schema';
+import { loadCombinedInsurance } from '@/db/carriers/load';
+import { loadQuoteCatalog } from '@/modules/catalog/repository';
+import { findRate } from '@/modules/engine/rates';
+import { runSuperQuote } from '@/modules/engine';
+import { loadActiveQuestions } from '@/modules/catalog/repository';
+import { extractFacts } from '@/modules/questionnaire';
+import { HEALTHY_ANSWERS } from '../fixtures/healthy-answers';
+import { describeIfDb, setupTestDb } from './helpers';
+
+const ASOF = '2026-06-01';
+const INTAKE = {
+  stateCode: 'TX',
+  age: 65,
+  sex: 'male' as const,
+  tobaccoUse: false,
+  faceAmount: 10000,
+  monthlyBudget: null,
+};
+
+describeIfDb('Combined Insurance Generational Life', () => {
+  let db: Awaited<ReturnType<typeof setupTestDb>>['db'];
+  let sql: ReturnType<typeof postgres>;
+  let questions: Awaited<ReturnType<typeof loadActiveQuestions>> = [];
+
+  beforeAll(async () => {
+    const created = await setupTestDb({ demoCarrier: false });
+    db = created.db;
+    sql = created.sql;
+    await loadCombinedInsurance(db, null);
+
+    const [carrier] = await db
+      .select()
+      .from(schema.carriers)
+      .where(eq(schema.carriers.slug, 'combined-insurance'))
+      .limit(1);
+    await db
+      .update(schema.carriers)
+      .set({ status: 'active', isVerified: true })
+      .where(eq(schema.carriers.id, carrier.id));
+    const productRows = await db
+      .select()
+      .from(schema.products)
+      .where(eq(schema.products.carrierId, carrier.id));
+    for (const product of productRows) {
+      await db.update(schema.products).set({ status: 'active' }).where(eq(schema.products.id, product.id));
+      await db
+        .update(schema.rateTables)
+        .set({ status: 'published' })
+        .where(eq(schema.rateTables.productId, product.id));
+    }
+    questions = await loadActiveQuestions(db);
+  }, 180_000);
+
+  afterAll(async () => {
+    await sql?.end();
+  });
+
+  async function bundle(slug: string, age = INTAKE.age, faceAmount = INTAKE.faceAmount) {
+    const bundles = await loadQuoteCatalog(db, { stateCode: 'TX', age, faceAmount, asOf: ASOF });
+    return bundles.find((b) => b.product.slug === slug)!;
+  }
+
+  it('still refuses to quote from an age last birthday, because Combined rates on nearest age', async () => {
+    const rate = findRate(await bundle('generational-life-preferred'), INTAKE, ASOF);
+    expect(rate.status).toBe('unavailable');
+    expect(rate.reason).toContain('age nearest birthday');
+  });
+
+  /**
+   * The Producer Guide never publishes the annual-to-monthly modal factor. It
+   * was derived from Combined's own agent quoter, which for a male aged 55,
+   * non-smoker, $10,000 level in Alabama returns:
+   *   Preferred $38.55 · Standard $42.93 · Sub-Standard $48.16 · Graded $58.31
+   * All four must reproduce exactly, or the factor is wrong.
+   */
+  it.each([
+    ['generational-life-preferred', 38.55],
+    ['generational-life-standard', 42.93],
+    ['generational-life-substandard', 48.16],
+    ['generational-life-graded', 58.31],
+  ])('reproduces the carrier quoter for %s: $%s/mo', async (slug, expected) => {
+    const rate = findRate(
+      await bundle(slug as string, 55, 10000),
+      {
+        stateCode: 'TX',
+        age: 55,
+        ageNearestBirthday: 55,
+        sex: 'male',
+        tobaccoUse: false,
+        faceAmount: 10000,
+        monthlyBudget: null,
+      },
+      ASOF,
+    );
+    expect(rate.status).toBe('found');
+    expect(rate.monthlyPremium).toBe(expected);
+  });
+
+  it('stores all four rating classes so the agent can see the price range', async () => {
+    const [carrier] = await db
+      .select()
+      .from(schema.carriers)
+      .where(eq(schema.carriers.slug, 'combined-insurance'))
+      .limit(1);
+    const productRows = await db
+      .select()
+      .from(schema.products)
+      .where(eq(schema.products.carrierId, carrier.id));
+    expect(productRows.map((p) => p.slug).sort()).toEqual([
+      'generational-life-graded',
+      'generational-life-preferred',
+      'generational-life-standard',
+      'generational-life-substandard',
+    ]);
+  });
+
+  it('rules out the Preferred class for a medication the guide restricts', async () => {
+    const [rule] = await db
+      .select()
+      .from(schema.medicationRules)
+      .where(eq(schema.medicationRules.medicationName, 'abilify'))
+      .limit(1);
+    expect(rule.result).toBe('decline');
+    expect(rule.explanation).toContain('Preferred class is ruled out');
+  });
+
+  it('classifies a Graded-only medication as graded across the carrier', async () => {
+    const [rule] = await db
+      .select()
+      .from(schema.medicationRules)
+      .where(eq(schema.medicationRules.medicationName, 'aricept'))
+      .limit(1);
+    expect(rule.result).toBe('graded');
+    expect(rule.productId).toBeNull();
+  });
+  it('honours the Producer Guide p.6 footprint', async () => {
+    const facts = extractFacts(questions, HEALTHY_ANSWERS);
+    const run = async (stateCode: string) => {
+      const bundles = await loadQuoteCatalog(db, {
+        stateCode,
+        age: 55,
+        faceAmount: 10000,
+        asOf: ASOF,
+      });
+      return runSuperQuote({
+        intake: {
+          stateCode,
+          age: 55,
+          ageNearestBirthday: 55,
+          sex: 'male',
+          tobaccoUse: false,
+          faceAmount: 10000,
+          monthlyBudget: null,
+        },
+        asOf: ASOF,
+        facts,
+        bundles,
+      });
+    };
+
+    // The guide names five states where Generational Life is not available.
+    for (const state of ['CA', 'FL', 'NY', 'ND', 'SD']) {
+      const quote = await run(state);
+      const blocked = quote.unavailable.find((o) => o.productSlug === 'generational-life-preferred');
+      expect(blocked?.exclusions.map((e) => e.code)).toContain('state_unavailable');
+    }
+
+    // Everywhere else, including the District of Columbia, is open and priced.
+    for (const state of ['TX', 'DC', 'AL']) {
+      const quote = await run(state);
+      const option = quote.options.find((o) => o.productSlug === 'generational-life-preferred');
+      expect(option, state).toBeDefined();
+      expect(option!.monthlyPremium, state).toBeGreaterThan(0);
+    }
+  });
+  it('loads nearest-age rate rows when the client ages differently on each basis', async () => {
+    // Combined rates on age nearest birthday, everyone else on age last
+    // birthday. A client born 1961-01-01 quoted in September 2026 is 65 last
+    // birthday but 66 nearest, so the catalog has to fetch BOTH ages: fetching
+    // only the last-birthday age starves Combined of its rates entirely and it
+    // reports "Rate unavailable" despite having a full published table.
+    const intake = {
+      stateCode: 'TX',
+      age: 65,
+      ageNearestBirthday: 66,
+      sex: 'male' as const,
+      tobaccoUse: false,
+      faceAmount: 10000,
+      monthlyBudget: null,
+    };
+    const bundles = await loadQuoteCatalog(db, {
+      stateCode: intake.stateCode,
+      age: intake.age,
+      ageNearestBirthday: intake.ageNearestBirthday,
+      faceAmount: intake.faceAmount,
+      asOf: ASOF,
+    });
+    const quote = runSuperQuote({
+      intake,
+      facts: extractFacts(questions, HEALTHY_ANSWERS),
+      asOf: ASOF,
+      bundles,
+    });
+    const option = quote.options.find((o) => o.productSlug === 'generational-life-preferred');
+    expect(option).toBeDefined();
+    expect(option!.monthlyPremium).toBeGreaterThan(0);
+  });
+
+  it('still reports no rate when only the last-birthday age is fetched', async () => {
+    // The failing case this guards against, stated explicitly.
+    const bundles = await loadQuoteCatalog(db, {
+      stateCode: 'TX',
+      age: 65,
+      faceAmount: 10000,
+      asOf: ASOF,
+    });
+    const bundle = bundles.find((b) => b.product.slug === 'generational-life-preferred')!;
+    const rate = findRate(
+      bundle,
+      {
+        stateCode: 'TX',
+        age: 65,
+        ageNearestBirthday: 66,
+        sex: 'male',
+        tobaccoUse: false,
+        faceAmount: 10000,
+        monthlyBudget: null,
+      },
+      ASOF,
+    );
+    expect(rate.status).toBe('unavailable');
+  });
+});

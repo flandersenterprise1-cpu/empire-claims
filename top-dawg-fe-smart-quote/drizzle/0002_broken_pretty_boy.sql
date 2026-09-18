@@ -1,0 +1,1 @@
+ALTER TABLE "products" ADD COLUMN "age_basis" varchar(24) DEFAULT 'last_birthday' NOT NULL;

@@ -3,7 +3,11 @@ name: CI
 on:
   push:
     branches: ["**"]
+    paths-ignore:
+      - 'top-dawg-fe-smart-quote/**'
   pull_request:
+    paths-ignore:
+      - 'top-dawg-fe-smart-quote/**'
 
 jobs:
   build:

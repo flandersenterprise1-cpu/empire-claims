@@ -1,0 +1,46 @@
+# Runs the whole platform locally or on any Docker host.
+#
+#   cp .env.example .env     # then set AUTH_SECRET and the admin password
+#   docker compose up --build
+#   docker compose run --rm app npm run db:migrate
+#   docker compose run --rm app npm run db:seed
+#
+# The database is NOT published to the host: only the app can reach it. Add a
+# ports mapping if you need to inspect it with psql, and take it out again.
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-topdawg}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-topdawg}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-topdawg}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://${POSTGRES_USER:-topdawg}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-topdawg}
+      AUTH_SECRET: ${AUTH_SECRET:?set AUTH_SECRET in .env}
+      AUTH_SESSION_HOURS: ${AUTH_SESSION_HOURS:-12}
+      QUOTE_RETENTION_DAYS: ${QUOTE_RETENTION_DAYS:-30}
+      SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-admin@topdawg.local}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:?set SEED_ADMIN_PASSWORD in .env}
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+    ports:
+      - '${PORT:-3000}:3000'
+
+volumes:
+  pgdata:
