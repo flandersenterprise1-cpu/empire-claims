@@ -333,3 +333,36 @@ export async function loadActiveQuestions(db: Db): Promise<QuestionRecord[]> {
     }))
     .sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id);
 }
+
+/**
+ * Carriers present in the system but not returned by a quote, with the reason.
+ *
+ * A carrier that is loaded but dormant is invisible to the agent, who has no
+ * way to tell it apart from one the agency was never appointed with. That is
+ * the difference between "this carrier lost on price" and "nobody checked this
+ * carrier", and an agent placing a case needs to know which.
+ */
+export async function listDormantCarriers(
+  db: Db,
+): Promise<Array<{ name: string; reason: 'no_rates' | 'not_published' }>> {
+  const carrierRows = await db.select().from(schema.carriers);
+  const productRows = await db.select().from(schema.products);
+  const rateTableRows = await db.select().from(schema.rateTables);
+  const rateEntryRows = await db
+    .select({ rateTableId: schema.rateEntries.rateTableId })
+    .from(schema.rateEntries);
+
+  const tablesWithRates = new Set(rateEntryRows.map((r) => r.rateTableId));
+  const productsWithRates = new Set(
+    rateTableRows.filter((t) => tablesWithRates.has(t.id)).map((t) => t.productId),
+  );
+
+  return carrierRows
+    .filter((c) => c.status !== 'active' && !c.isFictionalSample)
+    .map((c) => {
+      const products = productRows.filter((p) => p.carrierId === c.id);
+      const hasRates = products.some((p) => productsWithRates.has(p.id));
+      return { name: c.name, reason: hasRates ? ('not_published' as const) : ('no_rates' as const) };
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
+}

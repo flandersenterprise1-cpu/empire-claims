@@ -8,7 +8,12 @@
 import { eq, lt } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import * as schema from '@/db/schema';
-import { loadActiveQuestions, loadQuoteCatalog, type Db } from '@/modules/catalog/repository';
+import {
+  listDormantCarriers,
+  loadActiveQuestions,
+  loadQuoteCatalog,
+  type Db,
+} from '@/modules/catalog/repository';
 import { ENGINE_VERSION, runSuperQuote } from '@/modules/engine';
 import type { ClientIntake, SuperQuote } from '@/modules/engine/types';
 import { extractFacts, interviewProgress, visibleQuestions, type AnswerMap } from '@/modules/questionnaire';
@@ -175,6 +180,27 @@ export async function generateSuperQuote(
     quote.notices.unshift(
       `${interview.requiredOutstanding.length} health question(s) are still unanswered, so some products can only be returned as "Requires underwriting verification".`,
     );
+  }
+
+  // Name the carriers this quote did not consider. An agent comparing carriers
+  // has to be able to tell "did not win" from "was never checked"; a silently
+  // missing carrier reads as the former and is the latter.
+  const dormant = await listDormantCarriers(db);
+  if (dormant.length > 0) {
+    const noRates = dormant.filter((c) => c.reason === 'no_rates').map((c) => c.name);
+    const notPublished = dormant.filter((c) => c.reason === 'not_published').map((c) => c.name);
+    if (noRates.length > 0) {
+      quote.notices.push(
+        `Not compared, because no verified rate table has been loaded for them yet: ${noRates.join(', ')}. ` +
+          'Quote these carriers directly until their rates are entered in the admin area.',
+      );
+    }
+    if (notPublished.length > 0) {
+      quote.notices.push(
+        `Not compared, because their rates are loaded but not yet published: ${notPublished.join(', ')}. ` +
+          'An administrator can review and publish them in the admin area.',
+      );
+    }
   }
 
   if (options.persist !== false) {
