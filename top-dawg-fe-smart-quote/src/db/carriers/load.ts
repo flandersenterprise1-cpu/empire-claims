@@ -52,6 +52,7 @@ import {
   LP_GRADED_MEDICATIONS,
   LP_REFER_MEDICATIONS,
 } from './mutual-of-omaha-medications';
+import { expandCapture, MOO_CAPTURES, MOO_MONTHLY_FACTOR } from './quoter-derived-rates';
 
 type Database = ReturnType<typeof createDb>['db'];
 
@@ -400,6 +401,56 @@ export async function loadMutualOfOmaha(db: Database, adminId: number | null) {
             : 'Derived from the company licence on the Living Promise quoter page, not from a Living Promise state approval grid. Confirm per product before publishing.',
       })),
     );
+
+    // Rates recovered from the carrier quoter. Mutual of Omaha publishes no
+    // final-expense rate book -- Sales Support confirmed by phone that the
+    // quick quoter is the only rate source -- but the Product Guide p.12
+    // publishes the policy fee and the modal factors, and solving those
+    // against a quoted premium returns the underlying rate exactly. Each
+    // capture covers one age, sex and tobacco class; every other cell stays
+    // "Rate unavailable" rather than being interpolated from these.
+    const captures = MOO_CAPTURES.filter((c) => c.productSlug === spec.slug);
+    if (captures.length > 0) {
+      const [rateTable] = await db
+        .insert(schema.rateTables)
+        .values({
+          productId: product.id,
+          stateCode: null,
+          benefitType: spec.benefitType,
+          effectiveDate: '2025-01-01',
+          status: 'published',
+          version: 1,
+          monthlyPolicyFee: '0',
+          rateBasis: 'monthly_exact',
+          annualPolicyFee: String(spec.annualPolicyFee),
+          monthlyModalFactor: String(MOO_MONTHLY_FACTOR),
+          sourceDocumentId: productDoc.id,
+          sourcePage: 'p.12 + carrier quoter',
+          notes:
+            `Recovered from the Living Promise quoter on 2026-09-17: annual = rate per $1,000 x units + $${spec.annualPolicyFee} fee, ` +
+            `monthly BSP = annual x ${MOO_MONTHLY_FACTOR} (Product Guide p.12). Each plan's rate solved identically from a $10,000 and a ` +
+            '$20,000 quote, which is what pins the fee. COVERS AGE 65 ONLY, for the sex and tobacco classes captured; all other cells ' +
+            'report "Rate unavailable" until they are captured from the quoter.',
+          createdByUserId: adminId,
+        })
+        .returning();
+
+      const entries = captures.flatMap((capture) =>
+        expandCapture(capture, spec.annualPolicyFee, MOO_MONTHLY_FACTOR, 'nearest').map((r) => ({
+          rateTableId: rateTable.id,
+          age: r.age,
+          sex: r.sex,
+          tobaccoClass: r.tobaccoClass,
+          faceAmount: r.faceAmount,
+          monthlyPremium: r.monthlyPremium,
+          annualPremium: r.annualPremium,
+          ratePerThousand: String(capture.ratePerThousand),
+        })),
+      );
+      for (let i = 0; i < entries.length; i += 500) {
+        await db.insert(schema.rateEntries).values(entries.slice(i, i + 500));
+      }
+    }
   }
 
   // Medication rules. Declines are carrier-wide; "may qualify for Graded" is a
@@ -455,7 +506,7 @@ export async function loadMutualOfOmaha(db: Database, adminId: number | null) {
   }
 
   console.log(
-    `✓ Mutual of Omaha: ${products.length} products, ${medCount} draft medication rules. No rate table yet — premiums will read "Rate unavailable".`,
+    `✓ Mutual of Omaha: ${products.length} products, ${medCount} draft medication rules, ${MOO_CAPTURES.length} quoter-derived rate cells (AGE 65 ONLY — every other age reads "Rate unavailable").`,
   );
   void productDoc;
   return carrier;

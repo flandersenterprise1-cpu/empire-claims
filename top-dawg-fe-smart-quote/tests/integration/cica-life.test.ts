@@ -92,7 +92,10 @@ describeIfDb('CICA Life Superior Choice (real carrier data)', () => {
     expect(rate(gi)).toBeGreaterThan(rate(si));
   });
 
-  it('refuses to invent a monthly premium with no published modal factor', async () => {
+  it('prices a month at a twelfth of the annual rate card figure', async () => {
+    // Agent Guide p.48: Standard Issue, male 65, is 86.44 per $1,000. The guide
+    // publishes no policy fee and no modal factors anywhere, so ten units come
+    // to $864.40 a year and $72.03 a month.
     const bundle = await bundleFor('superior-choice-standard-issue', 'TX', 65, 10000);
     const rate = findRate(
       bundle!,
@@ -106,8 +109,26 @@ describeIfDb('CICA Life Superior Choice (real carrier data)', () => {
       },
       ASOF,
     );
+    expect(rate.status).toBe('found');
+    expect(rate.monthlyPremium).toBeCloseTo((86.44 * 10) / 12, 1);
+  });
+
+  it('reports rather than guesses an age the rate card does not cover', async () => {
+    const bundle = await bundleFor('superior-choice-standard-issue', 'TX', 86, 10000);
+    if (!bundle) return; // age 86 may fall outside the product entirely
+    const rate = findRate(
+      bundle,
+      {
+        stateCode: 'TX',
+        age: 86,
+        sex: 'male',
+        tobaccoUse: false,
+        faceAmount: 10000,
+        monthlyBudget: null,
+      },
+      ASOF,
+    );
     expect(rate.status).toBe('unavailable');
-    expect(rate.monthlyPremium ?? null).toBeNull();
     expect(rate.reason).toBeTruthy();
   });
 

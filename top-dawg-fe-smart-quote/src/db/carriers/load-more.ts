@@ -27,6 +27,12 @@ import {
   type CicaRateRow,
 } from './cica-rates';
 import {
+  AFLAC_ANNUAL_FEE,
+  AFLAC_CAPTURES,
+  AFLAC_MONTHLY_FACTOR,
+  expandCapture,
+} from './quoter-derived-rates';
+import {
   TRANSAMERICA_CARRIER,
   TRANSAMERICA_EXCLUDED_STATES,
   TRANSAMERICA_PRODUCTS,
@@ -90,7 +96,7 @@ export async function loadCicaLife(db: Database, adminId: number | null) {
       isVerified: false,
       isFictionalSample: false,
       notes:
-        'Superior Choice loaded from the Risk Assessment Guide (AG-CLA-JULY-2025-130), the Benefits At A Glance sheet, the Corporate Brochure and the CICA Life of America Agent Guide (May 2026). Annual rates, issue-age face bands and state approvals all come from the Agent Guide. OUTSTANDING before activation: the annual policy fee and the modal factors — the Agent Guide prints neither, so a monthly premium cannot be produced and the engine will show \'Rate unavailable\'.',
+        'Superior Choice loaded from the Risk Assessment Guide (AG-CLA-JULY-2025-130), the Benefits At A Glance sheet, the Corporate Brochure and the CICA Life of America Agent Guide (May 2026). Annual rates, issue-age face bands and state approvals all come from the Agent Guide. The guide publishes no policy fee and no modal factors anywhere — not on the rate card, not in the specimen policy schedules, not in a footnote — and the agency, which holds the appointment, confirms CICA has neither, so the monthly premium is the annual premium divided by 12.',
     })
     .returning();
 
@@ -171,10 +177,7 @@ export async function loadCicaLife(db: Database, adminId: number | null) {
       })),
     );
 
-    // Annual rate per $1,000 by issue age and sex, Agent Guide pp.46-48. No
-    // modal factor is published, so no monthly premium can be derived; the
-    // table loads with an annual basis and the engine reports the gap rather
-    // than inventing a figure.
+    // Annual rate per $1,000 by issue age and sex, Agent Guide pp.46-48.
     const rateRows: CicaRateRow[] = spec.slug.endsWith('guaranteed-issue')
       ? CICA_GUARANTEED_RATES
       : CICA_STANDARD_RATES;
@@ -253,9 +256,9 @@ export async function loadCicaLife(db: Database, adminId: number | null) {
 
   console.log(
     `\u2713 CICA Life: ${CICA_PRODUCTS.length} products, ${ruleCount} draft rules, ` +
-      `${(CICA_STANDARD_RATES.length + CICA_GUARANTEED_RATES.length) * 2} annual rate rows, ` +
+      `${(CICA_STANDARD_RATES.length + CICA_GUARANTEED_RATES.length) * 2} annual rate rows for ages 0-85, ` +
       `approved in ${CICA_APPROVED_STATES.length} of ${STATE_CODES.length} jurisdictions. ` +
-      `No policy fee or modal factor published \u2014 monthly premiums will read "Rate unavailable".`,
+      'The guide publishes no policy fee and no modal factors, so a month is a twelfth of the annual premium.',
   );
   return carrier;
 }
@@ -1013,6 +1016,55 @@ export async function loadAflac(db: Database, adminId: number | null) {
           : null,
       })),
     );
+
+    // Rates recovered from the carrier quoter. There is no Aflac rate book,
+    // but the sales guide publishes the $48 annual administration fee and the
+    // modal factor, and solving those against a quoted premium returns the
+    // underlying rate exactly. Each capture covers one age, sex and tobacco
+    // class; every other cell reports "Rate unavailable" rather than being
+    // interpolated from these.
+    const captures = AFLAC_CAPTURES.filter((c) => c.productSlug === spec.slug);
+    if (captures.length > 0) {
+      const [rateTable] = await db
+        .insert(schema.rateTables)
+        .values({
+          productId: product.id,
+          stateCode: null,
+          benefitType: spec.benefitType,
+          effectiveDate: AFLAC_CARRIER.effectiveDate,
+          status: 'published',
+          version: 1,
+          monthlyPolicyFee: '0',
+          rateBasis: 'monthly_exact',
+          annualPolicyFee: String(AFLAC_ANNUAL_FEE),
+          monthlyModalFactor: String(AFLAC_MONTHLY_FACTOR),
+          sourceDocumentId: guideDoc.id,
+          sourcePage: 'p.20 + rate quoter',
+          notes:
+            `Recovered from the Aflac rate quoter on 2026-09-17: annual = rate per $1,000 x units + $${AFLAC_ANNUAL_FEE} ` +
+            `administration fee (Sales Guide p.20), monthly = annual x ${AFLAC_MONTHLY_FACTOR} rounded UP to the cent. ` +
+            "Each plan's rate solved identically from a $10,000 and a $20,000 quote, which is what pins the fee. " +
+            'COVERS AGE 65 ONLY. Male tobacco is not captured and reports "Rate unavailable"; so does every other age.',
+          createdByUserId: adminId,
+        })
+        .returning();
+
+      const entries = captures.flatMap((capture) =>
+        expandCapture(capture, AFLAC_ANNUAL_FEE, AFLAC_MONTHLY_FACTOR, 'up').map((r) => ({
+          rateTableId: rateTable.id,
+          age: r.age,
+          sex: r.sex,
+          tobaccoClass: r.tobaccoClass,
+          faceAmount: r.faceAmount,
+          monthlyPremium: r.monthlyPremium,
+          annualPremium: r.annualPremium,
+          ratePerThousand: String(capture.ratePerThousand),
+        })),
+      );
+      for (let i = 0; i < entries.length; i += 500) {
+        await db.insert(schema.rateEntries).values(entries.slice(i, i + 500));
+      }
+    }
   }
 
   const COLUMN_BY_LETTER: Record<string, string> = {
@@ -1061,7 +1113,7 @@ export async function loadAflac(db: Database, adminId: number | null) {
     `✓ Aflac: ${AFLAC_PRODUCTS.length} products, ${medRows.length} draft medication rules ` +
       `(${declines} decline, ${medRows.length - declines} refer), ` +
       `available in ${STATE_CODES.length - AFLAC_EXCLUDED_STATES.length} of ${STATE_CODES.length} jurisdictions. ` +
-      `No rates or modal factors published — premiums will read "Rate unavailable".`,
+      `${AFLAC_CAPTURES.length} quoter-derived rate cells (AGE 65 ONLY, male tobacco not captured — everything else reads "Rate unavailable").`,
   );
   void guideDoc;
   return carrier;
