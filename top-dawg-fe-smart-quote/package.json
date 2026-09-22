@@ -31,7 +31,7 @@
     "docker:down": "docker compose down",
     "setup": "tsx scripts/setup.mts",
     "docker:setup": "docker compose run --rm app npx tsx scripts/setup.mts",
-    "vercel-build": "next build && tsx scripts/setup.mts"
+    "vercel-build": "next build && (tsx scripts/setup.mts || node scripts/setup-warn.mjs)"
   },
   "dependencies": {
     "@neon/config": "^1.7.2",
