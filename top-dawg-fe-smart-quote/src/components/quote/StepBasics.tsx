@@ -21,7 +21,7 @@ export interface BasicsValues {
 
 export const EMPTY_BASICS: BasicsValues = {
   stateCode: '',
-  ageMode: 'age',
+  ageMode: 'dob',
   age: '',
   dateOfBirth: '',
   sex: '',
@@ -92,18 +92,18 @@ export function StepBasics({ values, onChange, onSubmit, submitting, errors }: P
           <button
             type="button"
             className="choice"
-            aria-pressed={values.ageMode === 'age'}
-            onClick={() => set('ageMode', 'age')}
-          >
-            Enter age
-          </button>
-          <button
-            type="button"
-            className="choice"
             aria-pressed={values.ageMode === 'dob'}
             onClick={() => set('ageMode', 'dob')}
           >
             Enter date of birth
+          </button>
+          <button
+            type="button"
+            className="choice"
+            aria-pressed={values.ageMode === 'age'}
+            onClick={() => set('ageMode', 'age')}
+          >
+            Enter age only
           </button>
         </div>
         {values.ageMode === 'age' ? (
@@ -117,7 +117,16 @@ export function StepBasics({ values, onChange, onSubmit, submitting, errors }: P
             value={values.age}
             onChange={(event) => set('age', event.target.value)}
           />
-        ) : (
+        ) : null}
+        {values.ageMode === 'age' ? (
+          <span className="hint">
+            Carriers that rate on age nearest birthday — Combined Insurance among them — cannot be
+            priced from an age alone, because 66 may rate as 66 or 67 depending on the birthday.
+            They will read &ldquo;Rate unavailable&rdquo;. Enter the date of birth to price every
+            carrier.
+          </span>
+        ) : null}
+        {values.ageMode === 'dob' ? (
           <>
             <input
               className="input"
@@ -129,7 +138,7 @@ export function StepBasics({ values, onChange, onSubmit, submitting, errors }: P
               Used to work out the age, then discarded. The date of birth is never stored.
             </span>
           </>
-        )}
+        ) : null}
         {(errors.age || errors.dateOfBirth) ? (
           <span className="hint" style={{ color: 'var(--color-danger)' }}>
             {errors.age ?? errors.dateOfBirth}
