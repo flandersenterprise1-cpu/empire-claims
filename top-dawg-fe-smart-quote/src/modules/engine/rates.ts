@@ -205,8 +205,23 @@ export function findRate(
     }
   }
 
+  // Say what the table DOES cover. A carrier whose rates were recovered from a
+  // quoter one cell at a time holds only the ages somebody actually quoted, and
+  // "no verified rate for age 70" on its own reads like the product is
+  // unavailable rather than like the table is still being filled in.
+  const span = table.coveredAges;
+  let covered = '';
+  if (span) {
+    covered =
+      span.minAge === span.maxAge
+        ? ` Verified rates are loaded for age ${span.minAge} only; quote this carrier directly for other ages.`
+        : ` Verified rates are loaded for ages ${span.minAge} to ${span.maxAge}.`;
+  }
+
   return {
     status: 'unavailable',
-    reason: `No verified rate for age ${ratingAge}, ${intake.sex}, ${tobacco.replace('_', '-')}, $${intake.faceAmount.toLocaleString()} in rate table v${table.version}.`,
+    reason:
+      `No verified rate for age ${ratingAge}, ${intake.sex}, ${tobacco.replace('_', '-')}, ` +
+      `$${intake.faceAmount.toLocaleString()} in rate table v${table.version}.${covered}`,
   };
 }

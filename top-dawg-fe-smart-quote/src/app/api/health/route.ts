@@ -77,14 +77,48 @@ export async function GET() {
     }
   }
 
+  // Which carriers this deployment can actually quote, and how many rate rows
+  // each holds. Without this, "carrier X is not showing" cannot be told apart
+  // from "you are looking at an older deployment", and an operator with a
+  // browser has no way to settle it. Names and counts only.
+  let quoting: Array<{ carrier: string; rateRows: number }> | null = null;
+  if (schemaReady) {
+    try {
+      const [{ getDb }, { sql }] = await Promise.all([
+        import('@/db/client'),
+        import('drizzle-orm'),
+      ]);
+      const rows = await getDb().execute(sql`
+        select c.name as carrier, count(re.id)::int as rate_rows
+        from carriers c
+        join products p on p.carrier_id = c.id and p.status = 'active'
+        left join rate_tables rt on rt.product_id = p.id and rt.status = 'published'
+        left join rate_entries re on re.rate_table_id = rt.id
+        where c.status = 'active' and c.is_fictional_sample = false
+        group by c.name
+        order by c.name
+      `);
+      quoting = (rows as unknown as Array<{ carrier: string; rate_rows: number }>).map((r) => ({
+        carrier: r.carrier,
+        rateRows: Number(r.rate_rows),
+      }));
+    } catch {
+      quoting = null;
+    }
+  }
+
   const healthy = database === 'ok' && schemaReady === true && problems.length === 0;
 
   return Response.json(
     {
       status: healthy ? 'ok' : 'degraded',
+      // The commit this deployment was built from. Vercel sets it at build
+      // time; anywhere else it reads "local".
+      build: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? 'local',
       database,
       schemaReady,
       environment: problems.length === 0 ? 'ok' : problems.map((p) => p.variable),
+      quoting,
       detail,
       time: new Date().toISOString(),
     },

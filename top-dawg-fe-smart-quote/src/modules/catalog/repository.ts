@@ -3,7 +3,7 @@
  * plain `ProductBundle` records. This is the only seam between the database
  * and the (pure) engine, which keeps the engine trivially testable.
  */
-import { and, eq, inArray, isNull, or, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, max, min, or, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '@/db/schema';
 import type {
@@ -156,6 +156,29 @@ export async function loadQuoteCatalog(db: Db, query: CatalogQuery): Promise<Pro
         )
     : [];
 
+  // The age span each rate table actually holds. The entry query above is
+  // narrowed to this quote's age, so without this a table that simply has not
+  // been filled in for age 70 yet is indistinguishable, to the engine, from one
+  // that has no rates at all -- and the agent is told "no verified rate" with
+  // no idea whether the product is worth a manual quote.
+  const ageSpanByTable = new Map<number, { minAge: number; maxAge: number }>();
+  if (rateTableIds.length) {
+    const spans = await db
+      .select({
+        rateTableId: schema.rateEntries.rateTableId,
+        minAge: min(schema.rateEntries.age),
+        maxAge: max(schema.rateEntries.age),
+      })
+      .from(schema.rateEntries)
+      .where(inArray(schema.rateEntries.rateTableId, rateTableIds))
+      .groupBy(schema.rateEntries.rateTableId);
+    for (const row of spans) {
+      if (row.minAge != null && row.maxAge != null) {
+        ageSpanByTable.set(row.rateTableId, { minAge: Number(row.minAge), maxAge: Number(row.maxAge) });
+      }
+    }
+  }
+
   const carrierById = new Map(visibleCarriers.map((c) => [c.id, c]));
 
   return visibleProducts
@@ -237,6 +260,7 @@ export async function loadQuoteCatalog(db: Db, query: CatalogQuery): Promise<Pro
           monthlyPolicyFeeBelowThreshold:
             t.monthlyPolicyFeeBelowThreshold == null ? null : Number(t.monthlyPolicyFeeBelowThreshold),
           isFictionalSample: t.isFictionalSample,
+          coveredAges: ageSpanByTable.get(t.id) ?? null,
           entries: rateEntryRows
             .filter((e) => e.rateTableId === t.id)
             .map((e) => ({

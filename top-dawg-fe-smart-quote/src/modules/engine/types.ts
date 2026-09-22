@@ -226,6 +226,8 @@ export interface RateTableRecord {
   status: PublishStatus;
   version: number;
   monthlyPolicyFee: number;
+  /** The age span this table actually holds, or null when it holds no rates. */
+  coveredAges?: { minAge: number; maxAge: number } | null;
   /** 'monthly_exact' | 'annual_per_thousand' */
   rateBasis: string;
   annualPolicyFee: number;
