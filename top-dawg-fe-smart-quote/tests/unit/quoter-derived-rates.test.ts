@@ -8,6 +8,8 @@ import {
   MOO_ANNUAL_FEE,
   MOO_CAPTURES,
   MOO_MONTHLY_FACTOR,
+  AIG_CAPTURES,
+  AIG_MONTHLY_FACTOR,
 } from '@/db/carriers/quoter-derived-rates';
 
 /**
@@ -41,11 +43,28 @@ describe('Aflac, recovered from the rate quoter', () => {
     expect(aflacAt10k('aflac-fe-preferred', 'female', 'non_tobacco')!.monthlyPremium).toBe('43.99');
   });
 
-  it('holds male tobacco back, because it was never read off a requoted screen', () => {
-    const maleTobacco = AFLAC_CAPTURES.filter(
-      (c) => c.sex === 'male' && c.tobaccoClass === 'tobacco',
-    );
-    expect(maleTobacco).toEqual([]);
+  it('reproduces the male tobacco $20,000 quote', () => {
+    const at20k = (slug: string) => {
+      const capture = AFLAC_CAPTURES.find(
+        (c) => c.productSlug === slug && c.sex === 'male' && c.tobaccoClass === 'tobacco',
+      )!;
+      return expandCapture(capture, AFLAC_ANNUAL_FEE, AFLAC_MONTHLY_FACTOR, 'up').find(
+        (r) => r.faceAmount === 20000,
+      )!.annualPremium;
+    };
+    expect(at20k('aflac-fe-preferred')).toBe('1950.80');
+    expect(at20k('aflac-fe-standard')).toBe('2842.20');
+    expect(at20k('aflac-fe-modified')).toBe('3265.20');
+  });
+
+  it('covers all four sex and tobacco classes', () => {
+    const classes = new Set(AFLAC_CAPTURES.map((c) => `${c.sex}/${c.tobaccoClass}`));
+    expect([...classes].sort()).toEqual([
+      'female/non_tobacco',
+      'female/tobacco',
+      'male/non_tobacco',
+      'male/tobacco',
+    ]);
   });
 
   it('covers only age 65, so no other age can be priced from these', () => {
@@ -97,5 +116,33 @@ describe('expandCapture', () => {
     const at10k = Number(rows.find((r) => r.faceAmount === 10000)!.annualPremium);
     const at20k = Number(rows.find((r) => r.faceAmount === 20000)!.annualPremium);
     expect(at20k - 48).toBeCloseTo((at10k - 48) * 2, 2);
+  });
+});
+
+describe('AIG / Corebridge, recovered from the FE quoter', () => {
+  it('derives the modal factor as the ratio of the two quoter screens', () => {
+    // The Monthly screen printed these per $1,000; the Annual screen printed
+    // the rates below. The factor is the quotient, not an estimate.
+    const pairs: Array<[number, number]> = [
+      [65.85, 5.8604], // Legacy Max, non-tobacco
+      [94.71, 8.4292], // Legacy Max, tobacco
+      [79.45, 7.071], // Legacy Graded
+    ];
+    for (const [annual, monthly] of pairs) {
+      expect(monthly / annual).toBeCloseTo(AIG_MONTHLY_FACTOR, 5);
+    }
+  });
+
+  it('reproduces the monthly policy fees the quoter implied', () => {
+    expect(36 * AIG_MONTHLY_FACTOR).toBeCloseTo(3.21, 1);
+    expect(12 * AIG_MONTHLY_FACTOR).toBeCloseTo(1.06, 1);
+  });
+
+  it('withholds GIWL, whose two screens do not reconcile', () => {
+    expect(AIG_CAPTURES.some((c) => c.productSlug === 'giwl')).toBe(false);
+  });
+
+  it('covers male 65 only', () => {
+    expect([...new Set(AIG_CAPTURES.map((c) => `${c.sex}/${c.age}`))]).toEqual(['male/65']);
   });
 });

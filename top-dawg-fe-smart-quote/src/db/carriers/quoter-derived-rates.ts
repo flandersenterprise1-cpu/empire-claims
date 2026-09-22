@@ -45,13 +45,25 @@ export const AFLAC_ANNUAL_FEE = 48;
 export const AFLAC_MONTHLY_FACTOR = 0.0875;
 
 /**
- * Age 65, Texas, quoted at $10,000 and again at $20,000; each plan's rate
- * solved identically from both, which is what confirms the $48 fee.
+ * Age 65, Texas. Most cells were quoted at $10,000 and again at $20,000, and
+ * each plan's rate solved identically from both, which is what confirms the
+ * $48 fee.
  *
- * Male tobacco is deliberately absent. It was never read off a requoted
- * screen, and this quoter keeps showing the previous premiums until "Update
- * Products" is clicked -- two quotes taken that way once looked identical for
- * male and female and nearly sent a unisex table into the engine.
+ * Male tobacco came from the $20,000 quote alone, so it has no second face
+ * amount to cross-check against. Two other checks stand in for it, and both
+ * land exactly:
+ *
+ *   - all three rates resolve to whole cents, which a wrong fee or a wrong
+ *     face amount would not;
+ *   - on the Standard plan the tobacco load is 1.7077 for a female and 1.7075
+ *     for a male, and the male/female ratio is 1.3473 non-tobacco against
+ *     1.3471 tobacco.
+ *
+ * A warning for whoever extends this: the quoter keeps showing the PREVIOUS
+ * premiums until "Update Products" is clicked. Two quotes taken that way once
+ * looked identical for male and female and nearly sent a unisex table into the
+ * engine. Re-read the prices after every change, and if a number has not moved
+ * when it should have, it did not requote.
  */
 export const AFLAC_CAPTURES: QuoterCapture[] = [
   { productSlug: 'aflac-fe-preferred', age: 65, sex: 'female', tobaccoClass: 'non_tobacco', ratePerThousand: 45.47 },
@@ -63,6 +75,10 @@ export const AFLAC_CAPTURES: QuoterCapture[] = [
   { productSlug: 'aflac-fe-preferred', age: 65, sex: 'male', tobaccoClass: 'non_tobacco', ratePerThousand: 58.98 },
   { productSlug: 'aflac-fe-standard', age: 65, sex: 'male', tobaccoClass: 'non_tobacco', ratePerThousand: 81.82 },
   { productSlug: 'aflac-fe-modified', age: 65, sex: 'male', tobaccoClass: 'non_tobacco', ratePerThousand: 106.04 },
+  // From the $20,000 quote: $1,950.80, $2,842.20 and $3,265.20 annual.
+  { productSlug: 'aflac-fe-preferred', age: 65, sex: 'male', tobaccoClass: 'tobacco', ratePerThousand: 95.14 },
+  { productSlug: 'aflac-fe-standard', age: 65, sex: 'male', tobaccoClass: 'tobacco', ratePerThousand: 139.71 },
+  { productSlug: 'aflac-fe-modified', age: 65, sex: 'male', tobaccoClass: 'tobacco', ratePerThousand: 160.86 },
 ];
 
 /* -------------------------------------------------------------------------- */
@@ -89,6 +105,50 @@ export const MOO_MONTHLY_FACTOR = 0.089;
 export const MOO_CAPTURES: QuoterCapture[] = [
   { productSlug: 'living-promise-level', age: 65, sex: 'female', tobaccoClass: 'tobacco', ratePerThousand: 60.06 },
   { productSlug: 'living-promise-graded', age: 65, sex: 'female', tobaccoClass: 'unismoke', ratePerThousand: 54.9 },
+];
+
+/* -------------------------------------------------------------------------- */
+/* AIG / Corebridge                                                           */
+/* -------------------------------------------------------------------------- */
+
+/** SimpliNow product guide p.9. Legacy Max carries $36, Graded $12. */
+export const AIG_ANNUAL_FEE: Record<string, number> = {
+  'simplinow-legacy-max': 36,
+  'simplinow-legacy': 12,
+};
+
+/**
+ * Corebridge publishes no modal factor, but the same quote was screenshotted
+ * twice -- once in the quoter's Monthly mode and once in Annual -- and the
+ * factor is the ratio between them. It is not estimated; it is division, and
+ * three products agree to five decimal places:
+ *
+ *   Legacy Max Non-Tobacco   65.85 annual -> 5.8604 monthly   = 0.08900
+ *   Legacy Max Tobacco       94.71 annual -> 8.4292 monthly   = 0.08900
+ *   Legacy Graded            79.45 annual -> 7.0710 monthly   = 0.08900
+ *
+ * The published policy fees confirm it independently: $36 x 0.089 = $3.204
+ * and $12 x 0.089 = $1.068, against the $3.21 and $1.06 the monthly screen
+ * implied.
+ */
+export const AIG_MONTHLY_FACTOR = 0.089;
+
+/**
+ * Male 65, from the Annual-mode screen. Rates do not vary by state: Alabama,
+ * Texas and Mississippi returned identical premiums for the same client.
+ *
+ * GIWL is deliberately absent even though its annual rates are known
+ * ($116.10 per $1,000 through $15,000, $129.05 from $16,000, plus a $24 fee).
+ * Unlike the three products here, its Monthly and Annual screens do not
+ * reconcile: the monthly screen shows $217.26 at $20,000 where the annual
+ * rates and this factor predict $231.85. One of the two readings is wrong, and
+ * until that is settled GIWL reports "Rate unavailable" rather than a premium
+ * derived from a figure that failed its own cross-check.
+ */
+export const AIG_CAPTURES: QuoterCapture[] = [
+  { productSlug: 'simplinow-legacy-max', age: 65, sex: 'male', tobaccoClass: 'non_tobacco', ratePerThousand: 65.85 },
+  { productSlug: 'simplinow-legacy-max', age: 65, sex: 'male', tobaccoClass: 'tobacco', ratePerThousand: 94.71 },
+  { productSlug: 'simplinow-legacy', age: 65, sex: 'male', tobaccoClass: 'unismoke', ratePerThousand: 79.45 },
 ];
 
 /* -------------------------------------------------------------------------- */

@@ -30,6 +30,9 @@ import {
   AFLAC_ANNUAL_FEE,
   AFLAC_CAPTURES,
   AFLAC_MONTHLY_FACTOR,
+  AIG_ANNUAL_FEE,
+  AIG_CAPTURES,
+  AIG_MONTHLY_FACTOR,
   expandCapture,
 } from './quoter-derived-rates';
 import {
@@ -347,6 +350,55 @@ export async function loadAigCorebridge(db: Database, adminId: number | null) {
           : AIG_FOOTPRINT_CAVEAT,
       })),
     );
+
+    // Rates recovered from the Corebridge Final Expense Quoter. No rate book
+    // exists, but the same quote was captured in the quoter's Monthly and
+    // Annual modes, and the ratio between them is the modal factor -- three
+    // products agree on 0.089 to five decimal places, and the published policy
+    // fees confirm it. See quoter-derived-rates.ts.
+    const captures = AIG_CAPTURES.filter((c) => c.productSlug === spec.slug);
+    if (captures.length > 0) {
+      const fee = AIG_ANNUAL_FEE[spec.slug];
+      const [rateTable] = await db
+        .insert(schema.rateTables)
+        .values({
+          productId: product.id,
+          stateCode: null,
+          benefitType: spec.benefitType,
+          effectiveDate: AIG_CARRIER.effectiveDate,
+          status: 'published',
+          version: 1,
+          monthlyPolicyFee: '0',
+          rateBasis: 'monthly_exact',
+          annualPolicyFee: String(fee),
+          monthlyModalFactor: String(AIG_MONTHLY_FACTOR),
+          sourceDocumentId: siwlDoc.id,
+          sourcePage: 'p.9 + FE quoter',
+          notes:
+            `Recovered from the Corebridge Final Expense Quoter on 2026-09-17: annual = rate per $1,000 x units + $${fee} ` +
+            `policy fee (product guide p.9), monthly = annual x ${AIG_MONTHLY_FACTOR}. The factor is the ratio between the ` +
+            "quoter's Monthly and Annual screens for the same quote, and three products agree on it to five decimal places. " +
+            'Rates are national: Alabama, Texas and Mississippi returned identical premiums. COVERS MALE AGE 65 ONLY.',
+          createdByUserId: adminId,
+        })
+        .returning();
+
+      const entries = captures.flatMap((capture) =>
+        expandCapture(capture, fee, AIG_MONTHLY_FACTOR, 'nearest').map((r) => ({
+          rateTableId: rateTable.id,
+          age: r.age,
+          sex: r.sex,
+          tobaccoClass: r.tobaccoClass,
+          faceAmount: r.faceAmount,
+          monthlyPremium: r.monthlyPremium,
+          annualPremium: r.annualPremium,
+          ratePerThousand: String(capture.ratePerThousand),
+        })),
+      );
+      for (let i = 0; i < entries.length; i += 500) {
+        await db.insert(schema.rateEntries).values(entries.slice(i, i + 500));
+      }
+    }
   }
 
   // The SimpliNow underwriting table decides between the two underwritten
@@ -385,7 +437,7 @@ export async function loadAigCorebridge(db: Database, adminId: number | null) {
   }
 
   console.log(
-    `✓ AIG / Corebridge: ${AIG_PRODUCTS.length} products, ${ruleCount} draft rules. No rate tables supplied — premiums will read "Rate unavailable".`,
+    `✓ AIG / Corebridge: ${AIG_PRODUCTS.length} products, ${ruleCount} draft rules, ${AIG_CAPTURES.length} quoter-derived rate cells (MALE AGE 65 ONLY; GIWL withheld — its Monthly and Annual screens do not reconcile).`,
   );
   return carrier;
 }
@@ -1113,7 +1165,7 @@ export async function loadAflac(db: Database, adminId: number | null) {
     `✓ Aflac: ${AFLAC_PRODUCTS.length} products, ${medRows.length} draft medication rules ` +
       `(${declines} decline, ${medRows.length - declines} refer), ` +
       `available in ${STATE_CODES.length - AFLAC_EXCLUDED_STATES.length} of ${STATE_CODES.length} jurisdictions. ` +
-      `${AFLAC_CAPTURES.length} quoter-derived rate cells (AGE 65 ONLY, male tobacco not captured — everything else reads "Rate unavailable").`,
+      `${AFLAC_CAPTURES.length} quoter-derived rate cells across all four sex and tobacco classes (AGE 65 ONLY — every other age reads "Rate unavailable").`,
   );
   void guideDoc;
   return carrier;

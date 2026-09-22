@@ -32,7 +32,8 @@ const RATE_VERIFIED = [
   { slug: 'american-amicable', evidence: 'Senior Choice printed examples ($33.73, $76.06, $90.42) reproduce to the cent.' },
   { slug: 'combined-insurance', evidence: 'All four rating classes reproduce the carrier quoter to the cent (male 55 NS $10,000 AL).' },
   { slug: 'cica-life', evidence: 'Annual rate card, Agent Guide pp.46-48, loaded verbatim for ages 0-85 on both plans. The guide publishes no policy fee and no modal factors and the agency confirms CICA has none, so the monthly premium is the annual premium divided by 12.' },
-  { slug: 'aflac', evidence: 'No rate book exists. Rates solved from the carrier rate quoter against the $48 fee the Sales Guide publishes (p.20); each plan resolved identically from a $10,000 and a $20,000 quote. AGE 65 ONLY, and male tobacco not captured.' },
+  { slug: 'aflac', evidence: 'No rate book exists. Rates solved from the carrier rate quoter against the $48 fee the Sales Guide publishes (p.20); each plan resolved identically from a $10,000 and a $20,000 quote. All four sex and tobacco classes captured. AGE 65 ONLY.' },
+  { slug: 'aig-corebridge', evidence: 'No rate book exists. Rates solved from the Corebridge FE Quoter against the fees the product guide publishes (p.9); the modal factor is the ratio between the quoter\'s Monthly and Annual screens for the same quote, and three products agree on 0.089 to five decimal places. MALE AGE 65 ONLY, and GIWL withheld because its two screens do not reconcile.' },
   { slug: 'mutual-of-omaha', evidence: 'No rate book exists; Sales Support confirmed the quick quoter is the only rate source. Rates solved from it against the fees and modal factors the Product Guide publishes (p.12); the $20,000 quotes came back at exactly the predicted $885.60 and $1,110.00. AGE 65 ONLY.' },
 ];
 
