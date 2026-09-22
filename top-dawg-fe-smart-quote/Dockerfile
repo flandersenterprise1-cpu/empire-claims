@@ -23,6 +23,9 @@ COPY . .
 # DATABASE_URL arrives as a runtime environment variable.
 ENV DATABASE_URL=postgres://build:build@127.0.0.1:5432/build
 ENV NEXT_TELEMETRY_DISABLED=1
+# Ask for the self-contained server this image copies out below. Managed
+# hosts build their own bundle and must not get this output.
+ENV BUILD_STANDALONE=1
 RUN npm run build
 
 # --------------------------------------------------------------------- runtime

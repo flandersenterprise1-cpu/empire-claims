@@ -15,6 +15,21 @@ import { inspectEnv } from '@/lib/env';
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
+/** Innermost message in an error's cause chain, plus its code if it has one. */
+function describe(err: unknown): string {
+  let current: unknown = err;
+  let message = String(err);
+  let code: string | undefined;
+  for (let depth = 0; depth < 5 && current instanceof Error; depth += 1) {
+    message = current.message;
+    const maybe = (current as { code?: unknown }).code;
+    if (typeof maybe === 'string') code = maybe;
+    if (!current.cause) break;
+    current = current.cause;
+  }
+  return code ? `${code}: ${message}` : message;
+}
+
 export async function GET() {
   const problems = inspectEnv();
 
@@ -35,8 +50,10 @@ export async function GET() {
       database = 'unreachable';
       // A short, non-identifying summary: enough to tell a wrong password from
       // a wrong host from a missing schema, without leaking the URL.
-      const message = err instanceof Error ? err.message : String(err);
-      detail = message.slice(0, 200);
+      // The driver wraps the real fault ("Failed query: select 1" on its own
+      // explains nothing), so walk the cause chain and report the innermost
+      // message, which is where the DNS, TLS or authentication error lives.
+      detail = describe(err).slice(0, 200);
     }
   }
 

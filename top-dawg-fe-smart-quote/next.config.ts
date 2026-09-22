@@ -23,8 +23,13 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   // Emits .next/standalone, a self-contained server the Docker image runs
-  // without node_modules. Ignored by Vercel, which builds its own bundle.
-  output: 'standalone',
+  // without node_modules. Opt-in, because it is only the Docker path that
+  // needs it and it changes how the server is assembled: a managed host
+  // (Vercel, Render, Fly's Node buildpack) builds its own bundle from the
+  // default output, and handing it a second, differently-traced one is a way
+  // to get a deploy that builds clean and then 500s on every request.
+  // The Dockerfile sets BUILD_STANDALONE=1.
+  ...(process.env.BUILD_STANDALONE === '1' ? { output: 'standalone' as const } : {}),
   // This app is a subdirectory of a repository whose root holds a different,
   // unrelated project. Left to itself Next.js infers the repository root as
   // the tracing root and nests the standalone server one level deep, which
