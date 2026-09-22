@@ -38,11 +38,15 @@ export function inspectEnv(
       variable: 'DATABASE_URL',
       message: 'points at localhost, which is almost never right in production.',
     });
-  } else if (isProduction && !/sslmode=/.test(env.DATABASE_URL)) {
+  } else if (isProduction && /sslmode=(disable|allow|prefer)\b/.test(env.DATABASE_URL)) {
+    // A URL with no sslmode is fine: the database client requires TLS for any
+    // host that is not loopback. Only an explicit downgrade is a problem, and
+    // it is a real one -- health answers travel over this connection.
     problems.push({
       variable: 'DATABASE_URL',
       message:
-        'has no sslmode. Health answers travel over this connection; append ?sslmode=require unless the database is on a private network.',
+        'sets sslmode to a value that permits an unencrypted connection. ' +
+        'Health answers travel over this connection; use sslmode=require.',
     });
   }
 

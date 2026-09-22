@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import postgres from 'postgres';
+import { connectionOptions } from './client';
 
 /** Drops and recreates the public schema. Development convenience only. */
 async function main() {
@@ -8,7 +9,7 @@ async function main() {
   if (process.env.NODE_ENV === 'production') {
     throw new Error('Refusing to reset the database while NODE_ENV=production.');
   }
-  const sql = postgres(url, { max: 1 });
+  const sql = postgres(url, { ...connectionOptions(url), max: 1 });
   try {
     await sql.unsafe('drop schema if exists public cascade; create schema public;');
     await sql.unsafe('drop schema if exists drizzle cascade;');

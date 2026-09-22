@@ -12,10 +12,11 @@ import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { and, eq, inArray } from 'drizzle-orm';
 import * as schema from '../src/db/schema';
+import { connectionOptions } from '../src/db/client';
 
 const VERIFIED = ['transamerica', 'american-amicable', 'combined-insurance'];
 
-const sql = postgres(process.env.DATABASE_URL!);
+const sql = postgres(process.env.DATABASE_URL!, connectionOptions(process.env.DATABASE_URL!));
 const db = drizzle(sql, { schema });
 
 const carriers = await db

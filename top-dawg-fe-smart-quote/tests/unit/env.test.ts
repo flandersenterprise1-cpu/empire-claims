@@ -39,11 +39,6 @@ describe('inspectEnv', () => {
       .toContain('DATABASE_URL');
   });
 
-  it('requires ssl on a remote database, because health answers cross it', () => {
-    expect(names({ ...GOOD, DATABASE_URL: 'postgres://u:p@db.example.com:5432/x' }))
-      .toContain('DATABASE_URL');
-  });
-
   it('refuses to let the fictional carrier into a production database', () => {
     expect(names({ ...GOOD, SEED_DEMO_CARRIER: 'true' })).toContain('SEED_DEMO_CARRIER');
   });
@@ -64,5 +59,17 @@ describe('inspectEnv', () => {
       AUTH_SECRET: 'x'.repeat(48),
     };
     expect(inspectEnv(dev, false)).toEqual([]);
+  });
+
+  it('accepts a production URL with no sslmode, because the client requires TLS itself', () => {
+    const url = 'postgres://user:pw@ep-x.us-east-1.aws.neon.tech/topdawg';
+    expect(names({ ...GOOD, DATABASE_URL: url })).not.toContain('DATABASE_URL');
+  });
+
+  it('flags a deliberate TLS downgrade in production', () => {
+    for (const mode of ['disable', 'allow', 'prefer']) {
+      const url = `postgres://user:pw@ep-x.us-east-1.aws.neon.tech/topdawg?sslmode=${mode}`;
+      expect(names({ ...GOOD, DATABASE_URL: url })).toContain('DATABASE_URL');
+    }
   });
 });

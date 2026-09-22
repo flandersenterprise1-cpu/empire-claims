@@ -4,6 +4,7 @@ import postgres from 'postgres';
 import { describe } from 'vitest';
 import * as schema from '@/db/schema';
 import { runSeed } from '@/db/seed';
+import { connectionOptions } from '@/db/client';
 
 export const TEST_DATABASE_URL = process.env.TEST_DATABASE_URL;
 
@@ -15,7 +16,7 @@ export const describeIfDb = TEST_DATABASE_URL ? describe : describe.skip;
 
 export async function setupTestDb(options: { demoCarrier?: boolean } = {}) {
   if (!TEST_DATABASE_URL) throw new Error('TEST_DATABASE_URL is not set.');
-  const sql = postgres(TEST_DATABASE_URL, { max: 1 });
+  const sql = postgres(TEST_DATABASE_URL, { ...connectionOptions(TEST_DATABASE_URL), max: 1 });
   const db = drizzle(sql, { schema });
 
   // Start from a clean schema so every run is deterministic.
