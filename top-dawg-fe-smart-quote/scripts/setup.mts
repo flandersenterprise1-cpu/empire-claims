@@ -31,6 +31,7 @@ const RATE_VERIFIED = [
   { slug: 'transamerica', evidence: 'Agent Guide worked examples ($66.41 FE Express, $29.15 Immediate Solution) reproduce to the cent.' },
   { slug: 'american-amicable', evidence: 'Senior Choice printed examples ($33.73, $76.06, $90.42) reproduce to the cent.' },
   { slug: 'combined-insurance', evidence: 'All four rating classes reproduce the carrier quoter to the cent (male 55 NS $10,000 AL).' },
+  { slug: 'cica-life', evidence: 'Annual rate card, Agent Guide pp.46-48, loaded verbatim for ages 0-85 on both plans. The guide publishes no policy fee and no modal factors and the agency confirms CICA has none, so the monthly premium is the annual premium divided by 12.' },
 ];
 
 function run(script: string) {

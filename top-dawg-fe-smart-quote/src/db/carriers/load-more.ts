@@ -185,19 +185,25 @@ export async function loadCicaLife(db: Database, adminId: number | null) {
         stateCode: null,
         benefitType: spec.benefitType,
         effectiveDate: CICA_CARRIER.effectiveDate,
-        status: 'draft',
+        status: 'published',
         version: 1,
         monthlyPolicyFee: '0',
         rateBasis: 'annual_per_thousand',
+        // The Agent Guide prints no policy fee anywhere: not on the rate card,
+        // not in the specimen policy schedule, not in a footnote.
         annualPolicyFee: '0',
-        // Deliberately null: the Agent Guide publishes no modal factor, and
-        // the rate engine refuses to price an annual_per_thousand table
-        // without one rather than assume a conversion.
-        monthlyModalFactor: null,
+        // 1/12. The Agent Guide lists the four payment modes (p.56) but
+        // publishes no modal factor table and no fee, and the agency, which
+        // holds the CICA appointment, confirms the carrier has none. With no
+        // modal load to apply, a month is a twelfth of the annual premium.
+        // This divides the carrier's own printed annual figure; it does not
+        // interpolate between rate rows or invent a rate that was never
+        // printed.
+        monthlyModalFactor: '0.08333',
         sourceDocumentId: doc.id,
         sourcePage: 'pp.46-48',
         notes:
-          'Annual premium rate per $1,000, Agent Guide pp.46-48. POLICY FEE AND MODAL FACTORS NOT PUBLISHED — both must be supplied by CICA before this table can produce a monthly premium.',
+          'Annual premium rate per $1,000, Agent Guide pp.46-48 (ages 0-85, Standard Issue and Guaranteed Issue, male and female). The guide publishes no policy fee and no modal factors; the agency confirms CICA has none, so the monthly premium is the annual premium divided by 12.',
         createdByUserId: adminId,
       })
       .returning();
