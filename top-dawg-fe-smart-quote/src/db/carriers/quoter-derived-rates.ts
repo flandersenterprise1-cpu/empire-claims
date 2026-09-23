@@ -95,15 +95,29 @@ export const MOO_ANNUAL_FEE: Record<string, number> = {
 export const MOO_MONTHLY_FACTOR = 0.089;
 
 /**
- * Age 65, quoted at $10,000 and again at $20,000. The $20,000 quotes came back
- * at exactly the $885.60 and $1,110.00 the fee predicted, which is what pins
- * the $36 and $12.
+ * Age 65, quoted at $10,000 and again at $20,000. Three of the four cells are
+ * confirmed at both face amounts, which is what pins the $36 and $12 fees; the
+ * $20,000 quotes came back at exactly the $885.60, $1,233.20 and $1,110.00 the
+ * fees predicted.
  *
  * The Graded plan has no tobacco distinction (Product Guide p.12: "Standard"),
  * so it is captured once as unismoke and applies to either answer.
+ *
+ * Two of these cells nearly went in wrong. Male non-tobacco ($59.86) and
+ * female tobacco ($60.06) land two dollars apart, so a $10,000 quote alone
+ * cannot tell them apart and an early reading had them swapped -- which would
+ * have made a woman look more expensive than a man. The $20,000 quote is what
+ * separated them, and it is why the pairs are recorded here rather than the
+ * rates alone.
  */
 export const MOO_CAPTURES: QuoterCapture[] = [
+  // Confirmed at both $10,000 and $20,000: $460.80 and $885.60.
+  { productSlug: 'living-promise-level', age: 65, sex: 'female', tobaccoClass: 'non_tobacco', ratePerThousand: 42.48 },
+  // Confirmed at both $10,000 and $20,000: $634.60 and $1,233.20.
+  { productSlug: 'living-promise-level', age: 65, sex: 'male', tobaccoClass: 'non_tobacco', ratePerThousand: 59.86 },
+  // $10,000 only: $636.60. No second face amount was captured for this cell.
   { productSlug: 'living-promise-level', age: 65, sex: 'female', tobaccoClass: 'tobacco', ratePerThousand: 60.06 },
+  // Confirmed at both $10,000 and $20,000: $561.00 and $1,110.00.
   { productSlug: 'living-promise-graded', age: 65, sex: 'female', tobaccoClass: 'unismoke', ratePerThousand: 54.9 },
 ];
 

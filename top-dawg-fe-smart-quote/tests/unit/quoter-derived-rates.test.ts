@@ -74,7 +74,14 @@ describe('Aflac, recovered from the rate quoter', () => {
 
 describe('Mutual of Omaha, recovered from the quick quoter', () => {
   it('reproduces the $10,000 quotes and the $20,000 quotes that pinned the fee', () => {
-    const level = MOO_CAPTURES.find((c) => c.productSlug === 'living-promise-level')!;
+    // Named explicitly: there are three Level cells and they are only two
+    // dollars apart, so "the first one" is not a safe way to pick.
+    const level = MOO_CAPTURES.find(
+      (c) =>
+        c.productSlug === 'living-promise-level' &&
+        c.sex === 'female' &&
+        c.tobaccoClass === 'tobacco',
+    )!;
     const rows = expandCapture(
       level,
       MOO_ANNUAL_FEE['living-promise-level'],
@@ -95,6 +102,31 @@ describe('Mutual of Omaha, recovered from the quick quoter', () => {
     // The predicted figure the live quoter came back with, which is what
     // confirmed the $12 fee.
     expect(gradedRows.find((r) => r.faceAmount === 20000)!.annualPremium).toBe('1110.00');
+  });
+
+  it('reproduces the male and female non-tobacco quotes at both face amounts', () => {
+    const at = (sex: 'male' | 'female', face: number) => {
+      const capture = MOO_CAPTURES.find(
+        (c) => c.productSlug === 'living-promise-level' && c.sex === sex && c.tobaccoClass === 'non_tobacco',
+      )!;
+      return expandCapture(capture, MOO_ANNUAL_FEE['living-promise-level'], MOO_MONTHLY_FACTOR, 'nearest')
+        .find((r) => r.faceAmount === face)!.annualPremium;
+    };
+    expect(at('female', 10000)).toBe('460.80');
+    expect(at('female', 20000)).toBe('885.60');
+    expect(at('male', 10000)).toBe('634.60');
+    expect(at('male', 20000)).toBe('1233.20');
+  });
+
+  it('keeps male non-tobacco and female tobacco apart, two dollars from each other', () => {
+    const rate = (sex: 'male' | 'female', tob: 'non_tobacco' | 'tobacco') =>
+      MOO_CAPTURES.find(
+        (c) => c.productSlug === 'living-promise-level' && c.sex === sex && c.tobaccoClass === tob,
+      )!.ratePerThousand;
+    expect(rate('male', 'non_tobacco')).toBe(59.86);
+    expect(rate('female', 'tobacco')).toBe(60.06);
+    // A man must not come out cheaper than a woman of the same class.
+    expect(rate('male', 'non_tobacco')).toBeGreaterThan(rate('female', 'non_tobacco'));
   });
 
   it('covers only age 65', () => {
