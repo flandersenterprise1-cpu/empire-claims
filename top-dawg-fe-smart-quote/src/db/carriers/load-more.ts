@@ -26,6 +26,7 @@ import {
   type CicaFaceBand,
   type CicaRateRow,
 } from './cica-rates';
+import { GIWL_FACE_AMOUNTS, GIWL_MONTHLY_RATES } from './aig-giwl-rates';
 import {
   AFLAC_ANNUAL_FEE,
   AFLAC_CAPTURES,
@@ -282,7 +283,7 @@ export async function loadAigCorebridge(db: Database, adminId: number | null) {
       isVerified: false,
       isFictionalSample: false,
       notes:
-        'SimpliNow Legacy and Guaranteed Issue Whole Life loaded from AGLC201453 REV0424 and AGLC200472 REV1224. OUTSTANDING before activation: premium rates (use the SimpliNow Quoter or a rate sheet), SimpliNow face amounts, state availability, the build chart and the prescription decline list.',
+        'SimpliNow Legacy and Guaranteed Issue Whole Life loaded from AGLC201453 REV0424 and AGLC200472 REV1224. GIWL premiums come from the carrier rate card AGLC 200471 REV1224 (ages 50-80, both sexes, five face amounts, fee included). SimpliNow Legacy premiums are recovered from the Corebridge FE Quoter and currently cover male age 65 only. OUTSTANDING: SimpliNow face amounts, state availability, the build chart and the prescription decline list.',
     })
     .returning();
 
@@ -295,6 +296,20 @@ export async function loadAigCorebridge(db: Database, adminId: number | null) {
       reference: AIG_CARRIER.siwlRef,
       effectiveDate: AIG_CARRIER.effectiveDate,
       notes: 'Condition / sub-condition / time frame / decision table, pp.4-7. Build chart p.8. Prescription decline list p.10.',
+      uploadedByUserId: adminId,
+    })
+    .returning();
+
+  const [giwlDoc] = await db
+    .insert(schema.sourceDocuments)
+    .values({
+      carrierId: carrier.id,
+      title: 'Guaranteed Issue Whole Life (GIWL) Monthly Premium as of 12/07/2024',
+      docType: 'rate_sheet',
+      reference: 'AGLC 200471 REV1224',
+      effectiveDate: '2024-12-07',
+      notes:
+        'Monthly premiums, issue ages 50-80, male and female, at $5,000 / $10,000 / $15,000 / $20,000 / $25,000. The $24 annual policy fee is already inside each figure. Unisex rates apply in Montana and are not printed.',
       uploadedByUserId: adminId,
     })
     .returning();
@@ -320,7 +335,10 @@ export async function loadAigCorebridge(db: Database, adminId: number | null) {
         status: 'inactive',
         minFaceAmount: spec.minFaceAmount,
         maxFaceAmount: spec.maxFaceAmount,
-        faceIncrement: 1000,
+        // GIWL's rate card prints only $5,000 / $10,000 / $15,000 / $20,000 /
+        // $25,000, and the product is not linear between them, so the
+        // increment is the card's own step rather than $1,000.
+        faceIncrement: spec.slug === 'giwl' ? 5000 : 1000,
         ageBasis: 'last_birthday',
         minAge: spec.minAge,
         maxAge: spec.maxAge,
@@ -336,7 +354,14 @@ export async function loadAigCorebridge(db: Database, adminId: number | null) {
       .returning();
     if (spec.underwritten) underwrittenProductIds.push(product.id);
 
-    const excluded = AIG_EXCLUDED_STATES[spec.slug] ?? [];
+    // Montana is held unavailable for GIWL. The rate card's footnote says
+    // "Unisex rates available in Montana only" and does not print them, so a
+    // Montana quote would have to use the male or female column, and both are
+    // the wrong rate there.
+    const excluded = [
+      ...(AIG_EXCLUDED_STATES[spec.slug] ?? []),
+      ...(spec.slug === 'giwl' ? ['MT'] : []),
+    ];
     await db.insert(schema.productStates).values(
       STATE_CODES.map((code) => ({
         productId: product.id,
@@ -346,7 +371,9 @@ export async function loadAigCorebridge(db: Database, adminId: number | null) {
         notes: excluded.includes(code)
           ? code === 'ME'
             ? 'GIWL guide p.162: "Product not approved for sale in NY & ME."'
-            : 'Both guides: "AGL does not solicit, issue or deliver policies or contracts in the state of New York."'
+            : code === 'MT'
+              ? 'Rate card AGLC 200471 REV1224: "Unisex rates available in Montana only." The card does not print them, so no Montana premium can be quoted.'
+              : 'Both guides: "AGL does not solicit, issue or deliver policies or contracts in the state of New York."'
           : AIG_FOOTPRINT_CAVEAT,
       })),
     );
@@ -356,6 +383,57 @@ export async function loadAigCorebridge(db: Database, adminId: number | null) {
     // Annual modes, and the ratio between them is the modal factor -- three
     // products agree on 0.089 to five decimal places, and the published policy
     // fees confirm it. See quoter-derived-rates.ts.
+    // GIWL has a published rate card, so it needs no quoter arithmetic at all:
+    // the card prints all-in monthly premiums for every age 50-80, both sexes,
+    // at five face amounts, with the $24 annual policy fee already inside each
+    // figure. They load verbatim, and nothing is interpolated between the five
+    // face amounts because the product is not linear across them.
+    if (spec.slug === 'giwl') {
+      const [rateTable] = await db
+        .insert(schema.rateTables)
+        .values({
+          productId: product.id,
+          stateCode: null,
+          benefitType: spec.benefitType,
+          effectiveDate: '2024-12-07',
+          status: 'published',
+          version: 1,
+          monthlyPolicyFee: '0',
+          rateBasis: 'monthly_exact',
+          annualPolicyFee: '24',
+          monthlyModalFactor: null,
+          sourceDocumentId: giwlDoc.id,
+          sourcePage: 'AGLC 200471 REV1224',
+          notes:
+            'Carrier rate card "Guaranteed Issue Whole Life (GIWL) Monthly Premium as of 12/07/2024" (AGLC 200471 REV1224). ' +
+            'Monthly premiums, ages 50-80, male and female, at $5,000 / $10,000 / $15,000 / $20,000 / $25,000. The card states ' +
+            '"Monthly premium amounts include $24 annual policy fee", so the fee is inside each figure and none is added. Only ' +
+            'the five printed face amounts are loaded: GIWL is not linear across them. Montana excluded -- the card says unisex ' +
+            'rates apply there and does not print them.',
+          createdByUserId: adminId,
+        })
+        .returning();
+
+      const entries = GIWL_MONTHLY_RATES.flatMap(([age, male, female]) =>
+        GIWL_FACE_AMOUNTS.flatMap((faceAmount, i) =>
+          ([['male', male[i]], ['female', female[i]]] as const).map(([sex, monthly]) => ({
+            rateTableId: rateTable.id,
+            age,
+            sex: sex as 'male' | 'female',
+            tobaccoClass: 'unismoke' as const,
+            faceAmount,
+            monthlyPremium: monthly.toFixed(2),
+            annualPremium: null,
+            ratePerThousand: null,
+          })),
+        ),
+      );
+      for (let i = 0; i < entries.length; i += 500) {
+        await db.insert(schema.rateEntries).values(entries.slice(i, i + 500));
+      }
+      continue;
+    }
+
     const captures = AIG_CAPTURES.filter((c) => c.productSlug === spec.slug);
     if (captures.length > 0) {
       const fee = AIG_ANNUAL_FEE[spec.slug];
@@ -437,7 +515,7 @@ export async function loadAigCorebridge(db: Database, adminId: number | null) {
   }
 
   console.log(
-    `✓ AIG / Corebridge: ${AIG_PRODUCTS.length} products, ${ruleCount} draft rules, ${AIG_CAPTURES.length} quoter-derived rate cells (MALE AGE 65 ONLY; GIWL withheld — its Monthly and Annual screens do not reconcile).`,
+    `✓ AIG / Corebridge: ${AIG_PRODUCTS.length} products, ${ruleCount} draft rules, GIWL priced from the carrier rate card (${GIWL_MONTHLY_RATES.length * 2 * GIWL_FACE_AMOUNTS.length} premiums, ages 50-80, both sexes, five face amounts; Montana excluded as unisex). SimpliNow Legacy from the quoter, MALE AGE 65 ONLY.`,
   );
   return carrier;
 }
