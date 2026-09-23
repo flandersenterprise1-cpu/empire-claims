@@ -33,6 +33,7 @@ import {
   loadAigCorebridge,
   loadCicaLife,
   loadFidelityLife,
+  loadRoyalNeighbors,
   loadTransamerica,
   loadTransamericaSolutionSeries,
 } from './load-more';
@@ -777,6 +778,7 @@ async function main() {
     await loadTransamericaSolutionSeries(db, adminId);
     await loadFidelityLife(db, adminId);
     await loadAflac(db, adminId);
+    await loadRoyalNeighbors(db, adminId);
     console.log('\nAll carrier data loaded as DRAFT / INACTIVE. Verify in the admin area before publishing.');
   } finally {
     await sql.end();

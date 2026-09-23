@@ -28,6 +28,21 @@ import {
 } from './cica-rates';
 import { GIWL_FACE_AMOUNTS, GIWL_MONTHLY_RATES } from './aig-giwl-rates';
 import {
+  RNA_CARRIER,
+  RNA_PRODUCTS,
+  RNA_RULES,
+  RNA_UNMAPPED,
+  rnaExplanation,
+} from './royal-neighbors';
+import {
+  RNA_GDB_RATES,
+  RNA_GI_RATES,
+  RNA_MODAL_FACTORS,
+  RNA_SIWL_PREFERRED_RATES,
+  RNA_SIWL_STANDARD_RATES,
+  type RnaRateRow,
+} from './royal-neighbors-rates';
+import {
   AFLAC_ANNUAL_FEE,
   AFLAC_CAPTURES,
   AFLAC_MONTHLY_FACTOR,
@@ -1246,5 +1261,214 @@ export async function loadAflac(db: Database, adminId: number | null) {
       `${AFLAC_CAPTURES.length} quoter-derived rate cells across all four sex and tobacco classes (AGE 65 ONLY — every other age reads "Rate unavailable").`,
   );
   void guideDoc;
+  return carrier;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Royal Neighbors of America — Ensured Legacy Final Expense                   */
+/* -------------------------------------------------------------------------- */
+
+export async function loadRoyalNeighbors(db: Database, adminId: number | null) {
+  await resetCarrier(db, RNA_CARRIER.slug);
+
+  const [carrier] = await db
+    .insert(schema.carriers)
+    .values({
+      slug: RNA_CARRIER.slug,
+      name: RNA_CARRIER.name,
+      status: 'inactive',
+      isVerified: false,
+      isFictionalSample: false,
+      notes:
+        'Ensured Legacy Final Expense loaded from the rate sheet (2996-1-R Rev. 2-2025), the Risk Assessment Chart (2996-1-BRC Rev. 1-2024) and the Preferred Build Chart (2996-1-BBC Rev. 1-2024). All four rate classes carry complete annual rate tables, and the rate sheet publishes the modal factors, the modal certificate fee and the exact order of operations. OUTSTANDING: face amounts, the graded benefit schedule, and state availability beyond the Washington exclusion the rate sheet names.',
+    })
+    .returning();
+
+  const [rateDoc] = await db
+    .insert(schema.sourceDocuments)
+    .values({
+      carrierId: carrier.id,
+      title: RNA_CARRIER.rateSheet,
+      docType: 'rate_sheet',
+      reference: RNA_CARRIER.rateSheetRef,
+      effectiveDate: RNA_CARRIER.effectiveDate,
+      notes:
+        'Annual premiums per $1,000 for SIWL Standard (50-85), SIWL Preferred (50-75), GDB (50-85) and GI (50-80). Modal premium factors: annual 1.000 / $50.00 fee, quarterly 0.265 / $13.25, PAC monthly 0.087 / $4.35.',
+      uploadedByUserId: adminId,
+    })
+    .returning();
+
+  const [riskDoc] = await db
+    .insert(schema.sourceDocuments)
+    .values({
+      carrierId: carrier.id,
+      title: RNA_CARRIER.riskChart,
+      docType: 'underwriting_guide',
+      reference: RNA_CARRIER.riskChartRef,
+      notes:
+        'Four-column availability grid (Preferred / Standard / GDB / GI) across 60 conditions. "A indicates Rate Class may be available. N/A indicates Rate Class not available."',
+      uploadedByUserId: adminId,
+    })
+    .returning();
+
+  await db.insert(schema.sourceDocuments).values({
+    carrierId: carrier.id,
+    title: RNA_CARRIER.buildChart,
+    docType: 'build_chart',
+    reference: RNA_CARRIER.buildChartRef,
+    notes:
+      'Maximum weight for the Preferred class by height, 4\'8" to 6\'11". The chart calls itself "a general guide, it is only one of the factors and is not a guarantee of qualifying".',
+    uploadedByUserId: adminId,
+  });
+
+  const RATES_BY_SLUG: Record<string, RnaRateRow[]> = {
+    'ensured-legacy-siwl-preferred': RNA_SIWL_PREFERRED_RATES,
+    'ensured-legacy-siwl-standard': RNA_SIWL_STANDARD_RATES,
+    'ensured-legacy-gdb': RNA_GDB_RATES,
+  };
+
+  const productIds: number[] = [];
+  for (const [index, spec] of RNA_PRODUCTS.entries()) {
+    const [product] = await db
+      .insert(schema.products)
+      .values({
+        carrierId: carrier.id,
+        slug: spec.slug,
+        name: spec.name,
+        benefitType: spec.benefitType,
+        status: 'inactive',
+        minFaceAmount: 3000,
+        maxFaceAmount: 25000,
+        faceIncrement: 1000,
+        ageBasis: 'last_birthday',
+        minAge: spec.minAge,
+        maxAge: spec.maxAge,
+        tobaccoClasses: spec.tobaccoClasses,
+        sexClasses: ['male', 'female'],
+        waitingPeriodMonths: spec.waitingPeriodMonths,
+        simplicityScore: spec.simplicityScore,
+        rateMethodology: 'per_thousand',
+        allowInterpolation: false,
+        notes: spec.notes,
+        sortOrder: index,
+      })
+      .returning();
+    productIds.push(product.id);
+
+    // The rate sheet names only Washington, and only for GDB and GI. Every
+    // other state is recorded as unconfirmed rather than approved: the sheet
+    // says "Product not available in all states. Please confirm product
+    // availability", which is not a grid.
+    await db.insert(schema.productStates).values(
+      STATE_CODES.map((code) => ({
+        productId: product.id,
+        stateCode: code,
+        isAvailable: !spec.unavailableStates.includes(code),
+        effectiveDate: RNA_CARRIER.effectiveDate,
+        notes: spec.unavailableStates.includes(code)
+          ? 'Rate sheet 2996-1-R: "Product not available in Washington State."'
+          : 'No state approval grid was supplied. The rate sheet says only "Product not available in all states. Please confirm product availability." Confirm before relying on this state.',
+      })),
+    );
+
+    // Annual rate per $1,000. The rate sheet's own order of operations is
+    // modal-factor-first: the per-$1,000 rate is converted to the mode and
+    // rounded to the cent BEFORE it is multiplied by units, and the modal
+    // certificate fee is added last. Computing it straight through is four
+    // cents light on the sheet's own worked example.
+    const [rateTable] = await db
+      .insert(schema.rateTables)
+      .values({
+        productId: product.id,
+        stateCode: null,
+        benefitType: spec.benefitType,
+        effectiveDate: RNA_CARRIER.effectiveDate,
+        status: 'published',
+        version: 1,
+        monthlyPolicyFee: String(RNA_MODAL_FACTORS.pacMonthly.certificateFee),
+        rateBasis: 'annual_per_thousand_modal_first',
+        annualPolicyFee: String(RNA_MODAL_FACTORS.annual.certificateFee),
+        monthlyModalFactor: String(RNA_MODAL_FACTORS.pacMonthly.factor),
+        sourceDocumentId: rateDoc.id,
+        sourcePage: RNA_CARRIER.rateSheetRef,
+        notes:
+          'Annual premium per $1,000, rate sheet 2996-1-R Rev. 2-2025. Monthly (PAC) premium = [ (rate x 0.087) rounded to 2 places x units ] rounded to 2 places + $4.35 modal certificate fee, which is the sheet\'s own stated order. Its worked example: male 60 SIWL Standard non-tobacco at $10,000 is (53.75 x 0.087) = 4.68, x 10 = 46.80, + 4.35 = $51.15.',
+        createdByUserId: adminId,
+      })
+      .returning();
+
+    const entries =
+      spec.slug === 'ensured-legacy-gi'
+        ? RNA_GI_RATES.flatMap(([age, male, female]) =>
+            ([['male', male], ['female', female]] as const).map(([sex, rate]) => ({
+              rateTableId: rateTable.id,
+              age,
+              sex: sex as 'male' | 'female',
+              tobaccoClass: 'unismoke' as const,
+              faceAmount: 0,
+              monthlyPremium: '0',
+              annualPremium: null,
+              ratePerThousand: String(rate),
+            })),
+          )
+        : RATES_BY_SLUG[spec.slug].flatMap(([age, mNt, mT, fNt, fT]) =>
+            (
+              [
+                ['male', 'non_tobacco', mNt],
+                ['male', 'tobacco', mT],
+                ['female', 'non_tobacco', fNt],
+                ['female', 'tobacco', fT],
+              ] as const
+            ).map(([sex, tobaccoClass, rate]) => ({
+              rateTableId: rateTable.id,
+              age,
+              sex: sex as 'male' | 'female',
+              tobaccoClass: tobaccoClass as 'non_tobacco' | 'tobacco',
+              faceAmount: 0,
+              monthlyPremium: '0',
+              annualPremium: null,
+              ratePerThousand: String(rate),
+            })),
+          );
+    for (let i = 0; i < entries.length; i += 500) {
+      await db.insert(schema.rateEntries).values(entries.slice(i, i + 500));
+    }
+  }
+
+  let ruleCount = 0;
+  for (const r of RNA_RULES) {
+    await insertRule(
+      db,
+      {
+        carrierId: carrier.id,
+        productId: null,
+        conditionCode: r.conditionCode,
+        ruleCategory: r.ruleCategory,
+        criteria: r.criteria as never,
+        result: r.result,
+        benefitClassification: r.benefitClassification ?? null,
+        explanation: rnaExplanation(r),
+        sourceDocumentId: riskDoc.id,
+        sourcePage: RNA_CARRIER.riskChartRef,
+        effectiveDate: RNA_CARRIER.effectiveDate,
+        verificationStatus: 'draft',
+        isFictionalSample: false,
+        priority: r.priority,
+        createdByUserId: adminId,
+      },
+      adminId,
+    );
+    ruleCount += 1;
+  }
+
+  const rateRows =
+    (RNA_SIWL_STANDARD_RATES.length + RNA_SIWL_PREFERRED_RATES.length + RNA_GDB_RATES.length) * 4 +
+    RNA_GI_RATES.length * 2;
+  console.log(
+    `✓ Royal Neighbors of America: ${RNA_PRODUCTS.length} products, ${ruleCount} draft rules, ` +
+      `${rateRows} rate rows from the published rate sheet (SIWL Standard 50-85, Preferred 50-75, GDB 50-85, GI 50-80). ` +
+      `${RNA_UNMAPPED.length} charted conditions have no matching health question and stay unmapped. ` +
+      'Face amounts and the graded benefit schedule are NOT in the supplied documents.',
+  );
   return carrier;
 }
