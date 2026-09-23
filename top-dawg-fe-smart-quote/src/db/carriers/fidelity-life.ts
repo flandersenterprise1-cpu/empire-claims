@@ -12,10 +12,9 @@
  * NOTE ON AGE OF SOURCE: the grid is dated 07/10/2019. State filings change.
  * Re-confirm it against a current availability sheet before activating.
  *
- * The other document supplied under the "InstaBrain" name — the InstaBrain Term
- * Producer Guide — is TERM life insurance (10/15/20 year terms, issue ages
- * 18-60, minimum face $50,000). It is not a final expense product and is
- * deliberately NOT loaded into this platform. See INSTABRAIN_TERM_OUT_OF_SCOPE.
+ * The carrier's other product, InstaBrain Term, is recorded further down as
+ * INSTABRAIN_TERM. It is term life and carries no published premium, so it is
+ * not priced here -- but a client inside its issue ages is told it exists.
  */
 
 export const FIDELITY_LIFE_CARRIER = {
@@ -43,17 +42,87 @@ export const FIDELITY_LIFE_PRODUCT = {
 };
 
 /**
- * Why the second InstaBrain document is not loaded. Kept in code so the decision
- * is visible to whoever picks this up next.
+ * InstaBrain Term, from the Producer Guide (FLA_InstaBrainTerm_ProducerGuide
+ * 07/07/26) and the Consumer Guide.
+ *
+ * This is recorded, not quoted, and the reason is arithmetic rather than
+ * policy: neither guide contains a premium rate anywhere -- zero rate rows in
+ * twelve pages and four -- and the product's MINIMUM face amount is $50,000,
+ * which is twice this quoter's maximum. Even with rates in hand it could never
+ * appear in a final expense comparison, because no client asking for $3,000 to
+ * $25,000 of whole life is shopping a $50,000 term policy.
+ *
+ * What the guides DO give is a complete eligibility profile, and that is worth
+ * keeping: an agent sitting with a 55-year-old who turns out to want real
+ * coverage rather than burial cover should be told this exists. The quote
+ * results name it when the client falls inside the profile below.
  */
-export const INSTABRAIN_TERM_OUT_OF_SCOPE = {
-  document: 'InstaBrain Term Producer Guide (FLA_InstaBrainTerm_ProducerGuide_070726)',
-  reasons: [
-    'It is term life insurance (10, 15 and 20 year level terms), not whole life.',
-    'Minimum face amount is $50,000; this platform quotes $3,000 to $25,000.',
-    'Issue ages are 18-60; final expense clients are typically 50-85.',
-    'The recommendation engine models level, graded, modified and guaranteed-issue whole life benefit types. It has no concept of a term period, so a term product cannot be ranked correctly against the others.',
+export const INSTABRAIN_TERM = {
+  name: 'InstaBrain Term',
+  producerGuide: 'InstaBrain Term Producer Guide',
+  producerGuideRef: 'FLA_InstaBrainTerm_ProducerGuide 07/07/26',
+  consumerGuide: 'InstaBrain Term Consumer Guide',
+  /** Producer guide: "Issue Ages: 18-60, age last birthday". */
+  minAge: 18,
+  maxAge: 60,
+  /** Producer guide, Face Amounts & Term Periods: "Min: $50K". */
+  minFaceAmount: 50_000,
+  maxFaceAmount: 1_000_000,
+  termYears: [10, 15, 20, 30],
+  /** Producer guide: "Policy Fee: $95 Commissionable". */
+  annualPolicyFee: 95,
+  premiumModes: ['monthly', 'annual'],
+  riskClasses: {
+    nonTobacco: ['Preferred Plus', 'Preferred', 'Standard', 'Standard Extra'],
+    tobacco: ['Preferred', 'Standard Extra'],
+  },
+  /**
+   * Face maximums step down with issue age, and the 30-year term is not open
+   * to every age. Producer guide, Face Amounts & Term Periods table.
+   */
+  faceLimits: [
+    { termYears: [10, 15, 20], minAge: 18, maxAge: 55, maxFace: 1_000_000, tobacco: 'all' },
+    {
+      termYears: [10, 15, 20],
+      minAge: 56,
+      maxAge: 60,
+      maxFace: 900_000,
+      tobacco: 'all',
+      note: '$900K at 56, grading down $100K per issue age to $500K at 60.',
+    },
+    { termYears: [30], minAge: 18, maxAge: 50, maxFace: 1_000_000, tobacco: 'non_tobacco' },
+    { termYears: [30], minAge: 18, maxAge: 45, maxFace: 1_000_000, tobacco: 'tobacco' },
   ],
+  notLoaded: {
+    rates:
+      'NEITHER GUIDE CONTAINS A PREMIUM. Both were searched end to end; there are no rate tables and no modal factors, only the $95 policy fee and the two payment modes.',
+    ranking:
+      'The engine models level, graded, modified and guaranteed-issue whole life. It has no concept of a term period, so a term policy cannot be ranked against them even with rates.',
+    range:
+      "The minimum face amount of $50,000 is above this platform's $25,000 maximum, so the two products do not overlap at any coverage amount an agent would quote here.",
+  },
+  /** What it would take to quote it properly, if the agency decides to. */
   ifNeeded:
-    'Quoting term would be a separate product line: a term_years attribute on products, term-aware ranking, and a wider coverage range on the intake form.',
+    'Quoting term is a separate product line: a term_years attribute on products, term-aware ranking, a coverage range that reaches $1,000,000, and the rate tables from Fidelity Life.',
 };
+
+/**
+ * Whether a client is inside InstaBrain Term's issue ages. Face amount is
+ * deliberately not part of this: the point of the notice is to tell an agent
+ * the product exists for a client whose needs have outgrown final expense.
+ */
+export function instabrainFitsClient(age: number): boolean {
+  return age >= INSTABRAIN_TERM.minAge && age <= INSTABRAIN_TERM.maxAge;
+}
+
+/** The sentence an agent sees on the results screen when the client fits. */
+export function instabrainNotice(): string {
+  const t = INSTABRAIN_TERM;
+  return (
+    `This client is inside the issue ages for Fidelity Life ${t.name} ` +
+    `(${t.minAge}-${t.maxAge}, ${t.termYears.join('/')}-year level term, ` +
+    `$${(t.minFaceAmount / 1000).toFixed(0)}K-$${(t.maxFaceAmount / 1_000_000).toFixed(0)}M). ` +
+    'It is term life, not final expense, so it is not priced or ranked here and no premium is shown. ' +
+    'Quote it directly with Fidelity Life if the client wants more coverage than a final expense policy provides.'
+  );
+}

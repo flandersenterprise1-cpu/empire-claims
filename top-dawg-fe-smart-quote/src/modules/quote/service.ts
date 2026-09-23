@@ -8,6 +8,7 @@
 import { eq, lt } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import * as schema from '@/db/schema';
+import { instabrainFitsClient, instabrainNotice } from '@/db/carriers/fidelity-life';
 import {
   listDormantCarriers,
   loadActiveQuestions,
@@ -180,6 +181,14 @@ export async function generateSuperQuote(
     quote.notices.unshift(
       `${interview.requiredOutstanding.length} health question(s) are still unanswered, so some products can only be returned as "Requires underwriting verification".`,
     );
+  }
+
+  // A client young enough for real term coverage should hear about it, even
+  // though this platform cannot price it. InstaBrain Term has no published
+  // premium and a $50,000 minimum face, so it is never ranked -- but an agent
+  // who never hears the name cannot offer it either.
+  if (instabrainFitsClient(intake.age)) {
+    quote.notices.push(instabrainNotice());
   }
 
   // Name the carriers this quote did not consider. An agent comparing carriers
